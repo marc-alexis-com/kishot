@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kishot"
+dynamic = ["version"]
+description = "Presentation sheets of a KiCad board: 3D views and copper layers"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.9"
+authors = [{ name = "Marc-Alexis" }]
+keywords = ["kicad", "pcb", "render", "electronics"]
+
+[project.urls]
+Homepage = "https://github.com/marc-alexis-com/kishot"
+
+[project.scripts]
+kishot = "kishot:main"
+
+[tool.setuptools]
+py-modules = ["kishot"]
+
+[tool.setuptools.dynamic]
+version = { attr = "kishot.__version__" }
