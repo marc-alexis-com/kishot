@@ -39,6 +39,19 @@ kishot my-board.kicad_pcb
 ## A look at it
 
 <p align="center">
+  <img src="docs/images/tour.gif" alt="A slideshow of kishot: for each feature, the command in a dark bar and what it makes: the 3D sheet, the copper layers, DRC rings, one net, the copper and schematic diffs, 3D before and after, the fade, the three spin GIFs, and the paths printed on stdout" width="100%">
+  <br><sub>A tour: each command, and what it makes, on one demo board. Made by
+  <a href="docs/images/showcase.py">docs/images/showcase.py</a>, from KiCad's own demo project.</sub>
+</p>
+
+<p align="center">
+  <img src="docs/images/features.png" alt="Every sheet of kishot at a glance, twelve thumbnails each captioned with its command" width="100%">
+</p>
+
+<details>
+<summary><b>Every sheet in full size</b></summary>
+
+<p align="center">
   <img src="docs/images/spin.gif" alt="kishot's spin GIF: the RoyalBlue54L Feather, rendered by KiCad, turning once on itself, its name underneath" width="49%">
   <img src="docs/images/spin-ps2.gif" alt="The same turn pixelated like a PS2 game, on the background of KiCad's 3D viewer" width="49%">
   <br><sub><code>kishot -s spin</code>: the board turning, as GIFs that Slack, Discord or a README play
@@ -83,6 +96,8 @@ kishot my-board.kicad_pcb
   <img src="docs/images/net-VBUS.png" alt="kishot's net sheet: the VBUS net in red on F.Cu, the rest of the copper in light grey on every layer" width="100%">
   <br><sub><code>kishot --net VBUS</code>: where one net runs, layer by layer, and how long it is.</sub>
 </p>
+
+</details>
 
 These sheets were made by `kishot` from the RoyalBlue54L Feather, a demo project that
 ships with KiCad (see [Legal](#legal)), with no option.
@@ -282,7 +297,8 @@ regular expressions over the whole file, so the formatting of the file does not 
 nix develop                                   # optional: Python (numpy, Pillow), ImageMagick, fontconfig
 python3 -m unittest discover -s tests -v      # parser, layer order, planes, command line
 nix flake check                               # the same tests, in the Nix sandbox
-python3 docs/images/render.py docs/images     # the README's animations (numpy, Pillow)
+python3 docs/images/render.py docs/images     # the banner and the exploded view (numpy, Pillow)
+python3 docs/images/showcase.py docs/images   # the tour and the overview, from KiCad's demo (a minute)
 ```
 
 The tests need neither KiCad nor ImageMagick. The whole tool is `kishot.py`:

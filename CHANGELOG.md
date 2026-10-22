@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- README: a tour (`tour.gif`, one slide per feature, the command above its output) and an
+  overview (`features.png`), built by `docs/images/showcase.py` from KiCad's RoyalBlue54L demo
+  and a scripted review round; the full-size sheets folded under them.
+
 ## 0.4.0 — 2026-10-22
 
 - **`--drc`**: KiCad's DRC first; errors and warnings in every header, ringed on the copper
