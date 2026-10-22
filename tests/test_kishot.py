@@ -149,6 +149,38 @@ class Parsing(unittest.TestCase):
             self.assertEqual(kishot.read_board(pcb)["title_block"]["title"], "From sch")
 
 
+class Diff(unittest.TestCase):
+    def test_track_keys_ignore_ids_and_nets(self):
+        moved = BOARD.replace("(end 12 22)\n\t\t(layer \"F.Cu\")", "(end 14 22)\n\t\t(layer \"F.Cu\")", 1)
+        old, _ = kishot.track_keys(kishot.top_level_items(BOARD))
+        new, _ = kishot.track_keys(kishot.top_level_items(moved.replace("(net_name", "(uuid \"x\") (net_name")))
+        self.assertEqual(len(new["F.Cu"] - old["F.Cu"]), 1)
+        self.assertEqual(len(old["F.Cu"] - new["F.Cu"]), 0)  # the two identical segments are one
+        self.assertEqual(new["B.Cu"], old["B.Cu"])
+
+    def test_vias(self):
+        via = '\t(via\n\t\t(at 20 30)\n\t\t(size 0.6)\n\t\t(drill 0.3)\n\t\t(layers "F.Cu" "B.Cu")\n\t\t(net 1)\n\t)\n)\n'
+        board = BOARD[:BOARD.rindex(")")] + via
+        _, vias = kishot.track_keys(kishot.top_level_items(board))
+        _, moved = kishot.track_keys(kishot.top_level_items(board.replace("(at 20 30)", "(at 21 30)")))
+        self.assertEqual(len(vias), 1)
+        self.assertEqual(len(vias - moved), 1)
+
+    def test_crop_svg(self):
+        with tempfile.TemporaryDirectory() as t:
+            svg = Path(t) / "a.svg"
+            svg.write_text('<svg width="297.0022mm" height="210.0072mm" viewBox="0.0000 0.0000 297.0022 210.0072">')
+            kishot.crop_svg(svg, (10, 20, 60, 50))
+            self.assertIn('width="50.0000mm" height="30.0000mm" viewBox="10.0000 20.0000 50.0000 30.0000"',
+                          svg.read_text())
+            svg.write_text("<svg>")
+            with self.assertRaises(kishot.Failure):
+                kishot.crop_svg(svg, (0, 0, 1, 1))
+
+    def test_diff_sheet_needs_a_revision(self):
+        self.assertEqual(kishot.main(["-s", "diff"]), 2)
+
+
 class Captions(unittest.TestCase):
     def test_layer_caption(self):
         self.assertEqual(kishot.layer_caption("In1.Cu", "GND", 0, ["GND"]),

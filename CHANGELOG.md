@@ -1,6 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 — 2026-10-22
+
+- **`--diff REV`**: a new sheet, every copper layer compared with the board at an older git
+  revision. Removed copper in red, added in green, unchanged in grey, a pale halo around each
+  change; tracks and vias added and removed, per layer and in total. Both versions are framed
+  on the union of their outlines, so a board whose outline changed still lines up.
+- Without `-s`, `--diff` makes the diff sheet alone; `-s all --diff REV` makes all three.
 
 - README: an animated banner, a low-poly board turning in KiCad's 3D viewer colours, and an
   exploded view of its copper layers, drawn by `docs/images/render.py` (PS2-style software

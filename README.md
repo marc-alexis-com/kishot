@@ -27,6 +27,7 @@ kishot my-board.kicad_pcb
 |---|---|
 | **3D** | top, bottom, three three-quarter views and the profile, in the colours of the PCB editor (solder mask included), cut out on a light background |
 | **Copper layers** | every copper layer on its own, front to back, with the copper pours hidden so the routing shows; each one captioned with its track count and the net of its plane |
+| **Changes** | `--diff REV`: every copper layer against the board at an older git revision, removed copper in red, added in green, the rest in grey, each change ringed so a short track still shows; tracks and vias added and removed, per layer and in total |
 | **Header** | title, revision, date and company from the title block (the schematic's, when the board's is empty), board size, copper layers, footprints; the file name and KiCad version in the footer |
 | **For scripts** | stdout carries the paths written, one per line, and nothing else; progress and errors go to stderr; the exit status says whether every sheet was made |
 | **Opening** | `--open` shows the images once written; under Hyprland, `--workspace N` puts them on another workspace without leaving yours, and replaces an older window of the same image |
@@ -45,7 +46,13 @@ kishot my-board.kicad_pcb
   tracks are left to see. The bottom layer is mirrored, as seen from below.</sub>
 </p>
 
-Both sheets were made by `kishot` from the RoyalBlue54L Feather, a demo project that
+<p align="center">
+  <img src="docs/images/diff.png" alt="kishot's diff sheet: the eight copper layers in grey, removed tracks in red and added ones in green, each ringed with a pale halo, and the count per layer" width="100%">
+  <br><sub><code>kishot --diff HEAD~1</code>: what changed in the copper since the previous commit. Two
+  vias moved (on every layer they go through), tracks removed on F.Cu and In5.Cu, a new path on B.Cu.</sub>
+</p>
+
+These sheets were made by `kishot` from the RoyalBlue54L Feather, a demo project that
 ships with KiCad (see [Legal](#legal)), with no option.
 
 ## Install
@@ -83,11 +90,13 @@ kishot -s 3d --fast                 # quick 3D preview
 kishot -o out/                      # write somewhere else
 kishot --open                       # open the images once written
 kishot --open --workspace 11        # Hyprland: on workspace 11, in the background
+kishot --diff HEAD~1                # what changed in the copper since the last commit
+kishot --diff v1.0 -s all           # the three sheets, the diff against tag v1.0
 ```
 
 ```text
-usage: kishot [-h] [-s {3d,layers,all}] [-o DIR] [-f] [--open] [--workspace N]
-              [--viewer CMD] [-V]
+usage: kishot [-h] [-s {3d,layers,diff,all}] [-d REV] [-o DIR] [-f] [--open]
+              [--workspace N] [--viewer CMD] [-V]
               [board]
 
 positional arguments:
@@ -95,8 +104,11 @@ positional arguments:
                         (default: .)
 
 options:
-  -s, --sheet {3d,layers,all}
-                        sheet to make, repeatable: 3d, layers, all (default: all)
+  -s, --sheet {3d,layers,diff,all}
+                        sheet to make, repeatable: 3d, layers, diff, all
+                        (default: 3d and layers, or diff alone with --diff)
+  -d, --diff REV        compare the copper with the board at this git revision
+                        (a commit, tag, branch, HEAD~1...)
   -o, --out-dir DIR     where to write the images (created if missing)
   -f, --fast            basic 3D quality and smaller images, for a preview
   --open                open the images once written
@@ -107,7 +119,7 @@ options:
                         xdg-open)
 ```
 
-The images are `<board>-3d.png` and `<board>-layers.png`. Without `--out-dir`, they go to a
+The images are `<board>-3d.png`, `<board>-layers.png` and `<board>-diff.png`. Without `--out-dir`, they go to a
 `fabrication/` or `fab/` directory next to the board if there is one, else next to the board.
 `KISHOT_WORKSPACE` and `KISHOT_VIEWER` set the defaults of the last two options.
 
@@ -151,6 +163,15 @@ mirrored, and rasterises it. Silkscreen and fabrication layers are left out on p
 text hides the tracks. A pour counts as a plane, and is named in the caption, when its outline
 covers at least 30 % of the board.
 
+**Diff sheet.** `git show REV:<board>` gives the older board. Both versions lose their pour
+fill, each copper layer is exported from both in black and white, and both SVGs are framed on
+the same box, the union of the two outlines, in the board's own millimetres: an outline that
+grew between the two still lines up. A pixel is grey when it is copper in both, red when only
+in the old one, green when only in the new one, and anything that changed gets a pale halo.
+The counts compare tracks and vias by their geometry (ends, width, size), not by their ids, so
+a track that did not move is the same track even when KiCad renumbered it. A layer that exists
+in only one version is shown entirely red or green.
+
 The board file is read by a small S-expression scanner (quoted strings included), not by
 regular expressions over the whole file, so the formatting of the file does not matter.
 
@@ -163,6 +184,8 @@ regular expressions over the whole file, so the formatting of the file does not 
 | `view … still touches the frame` | Something very large sticks out of the board. The sheet is still made; that view is cut. |
 | `rendering view 1 failed` | The output of `kicad-cli` follows the message. A KiCad older than 9 has no `pcb render`. |
 | A plane's tracks still look solid | The zone is not a pour but a thick track or a pad. Only zone fills are hidden. |
+| `reading board.kicad_pcb at REV failed` | git's own message follows: an unknown revision, or a board that did not exist yet at that revision (or had another name). |
+| The whole diff is red and green, shifted | The board was moved on the page between the two versions; the diff compares page coordinates. |
 | `--workspace needs Hyprland, hyprctl and swayimg` | Outside Hyprland, `--workspace` is ignored and the images open the usual way. |
 
 ## Development
@@ -199,7 +222,9 @@ uses no Raspberry Pi design file; "Raspberry Pi" is a trademark of Raspberry Pi 
 The two sheets in this README (`3d.png`, `layers.png`) show the **RoyalBlue54L Feather** by Lord's Boards
 ([project](https://www.crowdsupply.com/lords-boards/royalblue54l-feather)), released under the
 CERN Open Hardware Licence v2, Permissive, and shipped with KiCad as a demo project. They were
-rendered by `kishot` from that project, unchanged. This project is not affiliated with KiCad
+rendered by `kishot` from that project, unchanged, except the diff sheet: it compares the
+project with a copy in which a few tracks were removed, two vias moved and one path added, for
+the example. This project is not affiliated with KiCad
 or with Lord's Boards; "KiCad" is used here only to name the software it works with.
 
 ## License

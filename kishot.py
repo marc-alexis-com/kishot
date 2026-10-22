@@ -28,9 +28,9 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
-SHEETS = ("3d", "layers")
+SHEETS = ("3d", "layers", "diff")
 
 # (file, caption, kicad-cli options)
 VIEWS = [
@@ -200,8 +200,11 @@ def planes(items, layers, box):
     return found
 
 
-def read_board(pcb):
-    text = pcb.read_text(encoding="utf-8")
+def read_board(pcb, text=None):
+    """What the sheets need from a board: `text` is its content when it does not come
+    from the file itself (an older revision, for --diff)."""
+    if text is None:
+        text = pcb.read_text(encoding="utf-8")
     items = top_level_items(text)
     tb = title_block(text)
     sch = pcb.with_suffix(".kicad_sch")
@@ -226,7 +229,23 @@ def read_board(pcb):
         "tracks": tracks,
         "planes": planes(items, layers, box),
         "footprints": sum(1 for h, _ in items if h == "footprint"),
+        "items": items,
     }
+
+
+def track_keys(items):
+    """Every track and via, keyed by its geometry: what --diff compares. Ids and net
+    numbers are left out, so a track that did not move is the same in both versions."""
+    tracks, vias = {}, set()
+    for head, t in items:
+        geo = tuple(re.findall(r"\((start|mid|end|width|at|size|drill) ([^()]*)\)", t))
+        if head in ("segment", "arc"):
+            m = re.search(r'\(layer "([^"]+)"\)', t)
+            if m:
+                tracks.setdefault(m.group(1), set()).add((head, geo))
+        elif head == "via":
+            vias.add(geo + tuple(re.findall(r'"([^"]+\.Cu)"', t)))
+    return tracks, vias
 
 
 # --- drawing -------------------------------------------------------------------
@@ -296,7 +315,7 @@ def sheet(tiles, columns, header, out, style, work):
     return out
 
 
-def header(pcb, board, subtitle):
+def header(pcb, board, subtitle, details=None):
     tb = board["title_block"]
     box = board["box"]
     n = len(board["layers"])
@@ -305,7 +324,7 @@ def header(pcb, board, subtitle):
         tb["date"], tb["company"],
         f"{box[2] - box[0]:.1f} × {box[3] - box[1]:.1f} mm" if box else "",
         f"{n} copper layer{'s' * (n != 1)}" if n else "",
-        f"{board['footprints']} footprints") if x]
+        f"{board['footprints']} footprints") if x] if details is None else details
     kicad = run(["kicad-cli", "--version"], "kicad-cli --version").strip()
     footer = f"{pcb.name}  ·  {subtitle}  ·  KiCad {kicad}, {datetime.date.today():%Y-%m-%d}"
     return tb["title"] or pcb.stem, details, footer
@@ -410,6 +429,129 @@ def make_layers(pcb, board, out, fast, work):
     return sheet(tiles, columns, header(pcb, board, "copper layers, pours hidden"), out, style, work)
 
 
+def git_version(pcb, rev):
+    """The board's content at a git revision, and a label for it: short hash and date."""
+    if not shutil.which("git"):
+        raise Failure("--diff needs git")
+    top = Path(run(["git", "-C", str(pcb.parent), "rev-parse", "--show-toplevel"],
+                   "finding the git repository").strip())
+    rel = pcb.resolve().relative_to(top.resolve()).as_posix()
+    text = run(["git", "-C", str(top), "show", f"{rev}:{rel}"], f"reading {rel} at {rev}")
+    label = run(["git", "-C", str(top), "log", "-1", "--format=%h, %cs", rev, "--"],
+                "reading the revision").strip()
+    return text, f"{rev} ({label})" if label and not label.startswith(rev) else rev
+
+
+def crop_svg(svg, box):
+    """Frame an SVG on `box` (mm, page coordinates): both versions then line up exactly."""
+    x0, y0, x1, y1 = box
+    text = svg.read_text(encoding="utf-8")
+    text, n = re.subn(r'width="[\d.]+mm" height="[\d.]+mm" viewBox="[^"]*"',
+                      f'width="{x1 - x0:.4f}mm" height="{y1 - y0:.4f}mm" '
+                      f'viewBox="{x0:.4f} {y0:.4f} {x1 - x0:.4f} {y1 - y0:.4f}"', text, count=1)
+    if not n:
+        raise Failure("unexpected SVG from kicad-cli: no page size in mm")
+    svg.write_text(text, encoding="utf-8")
+
+
+# One pixel class each: copper only in the old version, only in the new one, in both.
+REMOVED, ADDED, KEPT = "#d0342c", "#2e9e4a", "#a3a8b0"
+REMOVED_HALO, ADDED_HALO = "#f7d9d6", "#d5efdc"
+
+
+def make_diff(pcb, board, out, fast, work, rev):
+    old_text, label = git_version(pcb, rev)
+    old = read_board(pcb, old_text)
+    names = [n for n, _ in board["layers"]]
+    names += [n for n, _ in old["layers"] if n not in names]
+    aliases = dict(old["layers"]) | dict(board["layers"])
+    boxes = [b for b in (board["box"], old["box"]) if b]
+    if not boxes:
+        raise Failure("no board outline (Edge.Cuts) in either version")
+    box = (min(b[0] for b in boxes) - 1, min(b[1] for b in boxes) - 1,
+           max(b[2] for b in boxes) + 1, max(b[3] for b in boxes) + 1)
+
+    versions = {}
+    for tag, b in (("old", old), ("new", board)):
+        d = work / tag
+        d.mkdir()
+        (d / pcb.name).write_text(strip_fills(b["text"]), encoding="utf-8")
+        pro = pcb.with_suffix(".kicad_pro")
+        if pro.exists():
+            shutil.copy(pro, d / pro.name)
+        versions[tag] = (d / pcb.name, {n for n, _ in b["layers"]})
+
+    width = 750 if fast else 1500
+    density = max(150, min(2400, int(width / ((box[2] - box[0]) / 25.4))))
+    style = Style(width / 1500 * 0.85)
+    ratio = (box[3] - box[1]) / (box[2] - box[0])
+    cell = (width, int(width * 0.92 * min(max(ratio, 0.4), 1.6) / 0.86))
+    new_tracks, new_vias = track_keys(board["items"])
+    old_tracks, old_vias = track_keys(old["items"])
+
+    def raster(i, tag, name):
+        path, present = versions[tag]
+        png = work / f"{tag}-{i}.png"
+        if name not in present:
+            run(["magick", "-size", f"{width}x{max(1, int(width * ratio))}", "xc:white", str(png)],
+                "drawing an empty layer")
+            return png
+        svg = work / f"{tag}-{i}.svg"
+        run(["kicad-cli", "pcb", "export", "svg", "--layers", f"{name},Edge.Cuts",
+             "--mode-single", "--exclude-drawing-sheet", "--black-and-white",
+             "--drill-shape-opt", "2", "-o", str(svg), str(path)], f"exporting {name} ({tag})")
+        crop_svg(svg, box)
+        run(["magick", "-density", str(density), "-background", "white", str(svg), "-flatten",
+             "-resize", f"{width}x{max(1, int(width * ratio))}!", "-colorspace", "gray",
+             "-threshold", "50%", "+repage", str(png)], f"rasterising {name} ({tag})")
+        return png
+
+    def compare(index_name):
+        i, name = index_name
+        a, b = raster(i, "old", name), raster(i, "new", name)
+        png = work / f"diff-{i}.png"
+        # A pale halo around what changed: a removed 2 mm track is otherwise a few red
+        # pixels on a sheet of grey.
+        radius = max(4, width // 120)
+        halos = []
+        for tag, expr in (("removed", "u.r<0.5 && v.r>=0.5"), ("added", "u.r>=0.5 && v.r<0.5")):
+            halo = work / f"halo-{tag}-{i}.png"
+            run(["magick", str(a), str(b), "-fx", f"{expr} ? 1 : 0",
+                 "-morphology", "Dilate", f"Disk:{radius}", str(halo)], f"marking {name}")
+            halos.append(halo)
+        r, g, k, pr, pg = (tuple(int(h[j:j + 2], 16) / 255 for j in (1, 3, 5))
+                           for h in (REMOVED, ADDED, KEPT, REMOVED_HALO, ADDED_HALO))
+
+        def pick(c):
+            return (f"(wasc&&isc) ? {k[c]:.3f} : (wasc ? {r[c]:.3f} : (isc ? {g[c]:.3f} : "
+                    f"(nearr ? {pr[c]:.3f} : (neara ? {pg[c]:.3f} : 1))))")
+        run(["magick", str(a), str(b), *map(str, halos), "-colorspace", "sRGB", "-type", "TrueColor",
+             # wasc / isc: copper in the old / new version (single letters are taken by -fx).
+             "-fx", "wasc=u[0].r<0.5; isc=u[1].r<0.5; nearr=u[2].r>0.5; neara=u[3].r>0.5; "
+                    f"channel({pick(0)}, {pick(1)}, {pick(2)})",
+             *(["-flop"] if name == "B.Cu" else []), "+repage", str(png)], f"comparing {name}")
+        nt, ot = new_tracks.get(name, set()), old_tracks.get(name, set())
+        plus, minus = len(nt - ot), len(ot - nt)
+        label_ = name if not aliases.get(name) or aliases[name] == name else f"{name} ({aliases[name]})"
+        if name == "B.Cu":
+            label_ += ", seen from below"
+        caption = f"{label_}  ·  " + (f"+{plus} / −{minus} tracks" if plus or minus else "no track changed")
+        return tile(png, work / f"diff-tile-{i}.png", caption, cell, style, trim=False), plus, minus
+
+    with ThreadPoolExecutor(max_workers=min(len(names), 4)) as ex:
+        results = list(ex.map(compare, enumerate(names)))
+    plus = sum(r[1] for r in results)
+    minus = sum(r[2] for r in results)
+    vplus, vminus = len(new_vias - old_vias), len(old_vias - new_vias)
+    counts = ([f"+{plus} / −{minus} tracks", f"+{vplus} / −{vminus} vias"]
+              if plus or minus or vplus or vminus else ["no track or via changed"])
+    details = [f"changes since {label}", *counts, "red removed, green added, grey unchanged"]
+    say(f"since {rev}: +{plus} / -{minus} tracks, +{vplus} / -{vminus} vias")
+    columns = 2 if len(names) <= 4 else math.ceil(math.sqrt(len(names)))
+    return sheet([r[0] for r in results], columns,
+                 header(pcb, board, f"copper changes since {rev}", details), out, style, work)
+
+
 # --- opening -------------------------------------------------------------------
 
 def say(msg):
@@ -509,9 +651,17 @@ examples:
   kishot board.kicad_pcb --fast     quick preview: seconds instead of a minute
   kishot hw/ -s layers -o /tmp      only the copper layers, written to /tmp
   kishot --open --workspace 11      open the images on Hyprland workspace 11
+  kishot --diff HEAD~3              what changed in the copper since three commits ago
+
+sheets:
+  3d      six 3D views
+  layers  every copper layer, pours hidden
+  diff    every copper layer against an older git revision (--diff REV):
+          red removed, green added, grey unchanged
+  Without -s: 3d and layers, or only diff when --diff is given.
 
 output:
-  <board>-3d.png and <board>-layers.png, in --out-dir; without it, in a
+  <board>-3d.png, <board>-layers.png, <board>-diff.png, in --out-dir; without it, in a
   fabrication/ or fab/ directory next to the board if there is one, else next
   to the board. Each path written is printed on stdout, one per line.
 
@@ -552,7 +702,11 @@ def parse_args(argv):
     ap.add_argument("board", type=Path, nargs="?", default=Path("."),
                     help="a .kicad_pcb file, or a directory holding exactly one (default: .)")
     ap.add_argument("-s", "--sheet", choices=(*SHEETS, "all"), action="append",
-                    help="sheet to make, repeatable: 3d, layers, all (default: all)")
+                    help="sheet to make, repeatable: 3d, layers, diff, all (default: 3d and layers, "
+                         "or diff alone with --diff)")
+    ap.add_argument("-d", "--diff", metavar="REV",
+                    help="compare the copper with the board at this git revision (a commit, "
+                         "tag, branch, HEAD~1...)")
     ap.add_argument("-o", "--out-dir", type=Path, metavar="DIR",
                     help="where to write the images (created if missing)")
     ap.add_argument("-f", "--fast", action="store_true",
@@ -569,7 +723,16 @@ def parse_args(argv):
 
 def main(argv=None):
     a = parse_args(argv)
-    sheets = [s for s in SHEETS if not a.sheet or "all" in a.sheet or s in a.sheet]
+    if a.sheet and "diff" in a.sheet and not a.diff:
+        print("kishot: error: the diff sheet needs --diff REV", file=sys.stderr)
+        return 2
+    if not a.sheet:
+        wanted = {"diff"} if a.diff else {"3d", "layers"}
+    elif "all" in a.sheet:
+        wanted = {"3d", "layers"} | ({"diff"} if a.diff else set())
+    else:
+        wanted = set(a.sheet)
+    sheets = [s for s in SHEETS if s in wanted]
     try:
         pcb = find_board(a.board)
         for tool in ("kicad-cli", "magick"):
@@ -585,8 +748,11 @@ def main(argv=None):
                 work.mkdir()
                 out = out_dir / f"{pcb.stem}-{s}.png"
                 say(f"{s} sheet of {pcb.name}…")
-                make = make_3d if s == "3d" else make_layers
-                written.append(make(pcb, board, out, a.fast, work))
+                if s == "diff":
+                    written.append(make_diff(pcb, board, out, a.fast, work, a.diff))
+                else:
+                    make = make_3d if s == "3d" else make_layers
+                    written.append(make(pcb, board, out, a.fast, work))
                 print(out, flush=True)
     except Failure as e:
         say(str(e))
