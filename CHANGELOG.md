@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- README: an animated banner, a low-poly board turning in KiCad's 3D viewer colours, and an
+  exploded view of its copper layers, drawn by `docs/images/render.py` (PS2-style software
+  renderer, numpy and Pillow).
+
 ## 0.1.0 — 2026-10-22
 
 First release.

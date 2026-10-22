@@ -24,7 +24,8 @@
 
       devShells = forAll (pkgs: {
         default = pkgs.mkShell {
-          packages = [ pkgs.python3 pkgs.imagemagick pkgs.fontconfig ];
+          # numpy and Pillow are for docs/images/render.py only; kishot needs neither.
+          packages = [ (pkgs.python3.withPackages (p: [ p.numpy p.pillow ])) pkgs.imagemagick pkgs.fontconfig ];
         };
       });
     };
