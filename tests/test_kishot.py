@@ -179,6 +179,85 @@ class Diff(unittest.TestCase):
 
     def test_diff_sheet_needs_a_revision(self):
         self.assertEqual(kishot.main(["-s", "diff"]), 2)
+        self.assertEqual(kishot.main(["-s", "net"]), 2)
+
+
+NETS_BOARD = """(kicad_pcb
+\t(net 0 "")
+\t(net 1 "GND")
+\t(net 2 "/power/VBAT")
+\t(net 3 "/io/VBAT_SENSE")
+\t(segment (start 0 0) (end 3 4) (width 0.2) (layer "F.Cu") (net 1))
+\t(segment (start 0 0) (end 6 8) (width 0.3) (layer "F.Cu") (net 2))
+\t(arc (start 1 0) (mid 0 1) (end -1 0) (width 0.2) (layer "B.Cu") (net 2))
+\t(via (at 1 1) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 1))
+\t(zone (net 1) (net_name "GND") (layer "B.Cu") (polygon (pts (xy 0 0) (xy 1 0) (xy 1 1)))
+\t\t(filled_polygon (layer "B.Cu") (pts (xy 0 0) (xy 1 0) (xy 1 1))))
+\t(footprint "R" (layer "F.Cu")
+\t\t(pad "1" smd rect (at 0 0) (size 1 1) (layers "F.Cu") (net 1 "GND"))
+\t\t(pad "2" smd rect (at 2 0) (size 1 1) (layers "F.Cu") (net 2 "/power/VBAT")))
+\t(gr_line (start 0 0) (end 9 9) (layer "F.Cu"))
+\t(gr_rect (start 0 0) (end 10 10) (layer "Edge.Cuts"))
+)
+"""
+
+
+class Nets(unittest.TestCase):
+    def setUp(self):
+        self.items = kishot.top_level_items(NETS_BOARD)
+        self.netmap = kishot.net_table(self.items)
+        self.board = {"netmap": self.netmap, "text": NETS_BOARD}
+
+    def test_item_net_by_number_and_by_name(self):
+        seg = [t for h, t in self.items if h == "segment"][1]
+        self.assertEqual(kishot.item_net(seg, self.netmap), "/power/VBAT")
+        self.assertEqual(kishot.item_net('(pad "1" (net "GND"))', {}), "GND")  # KiCad 10
+        self.assertEqual(kishot.item_net('(segment (net 7))', {}), "")
+
+    def test_find_net(self):
+        self.assertEqual(kishot.find_net(self.board, "GND"), "GND")
+        self.assertEqual(kishot.find_net(self.board, "gnd"), "GND")
+        self.assertEqual(kishot.find_net(self.board, "vbat"), "/power/VBAT")
+        with self.assertRaisesRegex(kishot.Failure, "close: .*VBAT"):
+            kishot.find_net(self.board, "VBATT")
+
+    def test_only_net(self):
+        out = kishot.only_net(NETS_BOARD, self.netmap, "/power/VBAT")
+        heads = [h for h, _ in kishot.top_level_items(out)]
+        self.assertEqual(heads.count("segment"), 1)
+        self.assertEqual(heads.count("arc"), 1)
+        self.assertNotIn("via", heads)
+        self.assertNotIn("zone", heads)
+        self.assertNotIn("gr_line", heads)  # graphic copper is not the net's
+        self.assertIn("gr_rect", heads)  # the outline stays
+        footprint = next(t for h, t in kishot.top_level_items(out) if h == "footprint")
+        self.assertNotIn('"GND"', footprint)
+        self.assertIn("/power/VBAT", footprint)
+
+    def test_track_length(self):
+        segs = [(h, t) for h, t in self.items if h in ("segment", "arc")]
+        self.assertAlmostEqual(kishot.track_length(*segs[0]), 5.0)
+        self.assertAlmostEqual(kishot.track_length(*segs[2]), 3.14159265, places=5)
+
+
+class Sheets(unittest.TestCase):
+    def pick(self, *argv):
+        return kishot.choose_sheets(kishot.parse_args(list(argv)))
+
+    def test_defaults(self):
+        self.assertEqual(self.pick(), ["3d", "layers"])
+        self.assertEqual(self.pick("--net", "GND"), ["net"])
+        self.assertEqual(self.pick("--diff", "HEAD~1"), ["diff", "sch-diff", "3d-diff", "fade"])
+        self.assertEqual(self.pick("--diff", "HEAD", "-s", "fade"), ["fade"])
+
+    def test_all(self):
+        self.assertEqual(self.pick("-s", "all"), ["3d", "layers", "spin"])
+        self.assertEqual(self.pick("-s", "all", "--net", "GND", "--diff", "HEAD"),
+                         ["3d", "layers", "net", "diff", "sch-diff", "3d-diff", "fade", "spin"])
+
+    def test_missing_option(self):
+        self.assertIn("--diff", self.pick("-s", "3d-diff"))
+        self.assertIn("--net", self.pick("-s", "net"))
 
 
 class Captions(unittest.TestCase):

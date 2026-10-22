@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.4.0 — 2026-10-22
+
+- **`--drc`**: KiCad's DRC first; errors and warnings in every header, ringed on the copper
+  layers (red errors, thin orange warnings), at the position and on the layer KiCad gives.
+- **`--net NAME`**: a sheet with one net in its layer's colour, the rest of the copper in grey;
+  tracks, length, vias and pads. Names match exactly, in any case, or by their last part.
+- **`--diff`** now makes four sheets: the copper as before; **`sch-diff`**, every schematic page
+  compared, with a close-up of each change; **`3d-diff`**, top and bottom before and after, what
+  changed ringed in red; **`fade`**, a GIF from one version to the other. The older project is
+  unpacked with `git archive`, so its schematic and its own 3D models come along.
+- **`--note TEXT`**: a line of your own at the head of every sheet.
+- The copper sheet's captions give each layer's track length; its header the total length, vias,
+  narrowest track and net classes.
+- The copper sheet is now framed on the outline in millimetres, as the diff is (DRC markers land
+  on the right pixel); B.Cu is mirrored after rendering.
+
 ## 0.3.0 — 2026-10-22
 
 - **`-s spin`**: the board, rendered by KiCad, turning once on itself, as three animated GIFs
