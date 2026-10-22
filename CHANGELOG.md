@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.0 — 2026-10-22
+
+- **`-s spin`**: an animated GIF of the board, rendered by KiCad, turning once on itself (36
+  frames, 24 with `--fast`). Frames that touch the edge make the whole turn zoom out; one crop
+  and one palette for every frame. Part of `-s all`, not of the default.
+
 ## 0.2.0 — 2026-10-22
 
 - **`--diff REV`**: a new sheet, every copper layer compared with the board at an older git

@@ -28,9 +28,9 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
-SHEETS = ("3d", "layers", "diff")
+SHEETS = ("3d", "layers", "diff", "spin")
 
 # (file, caption, kicad-cli options)
 VIEWS = [
@@ -377,6 +377,89 @@ def make_3d(pcb, board, out, fast, work):
     return sheet(tiles, 3, header(pcb, board, "3D views"), out, style, work)
 
 
+SPIN_TILT = -55  # degrees: the board seen from above, at a slant
+SPIN_SECONDS = 4.8  # one turn
+
+
+def opaque_box(png):
+    """x0, y0, x1, y1 of the opaque part of a render."""
+    out = run(["magick", str(png), "-alpha", "extract", "-threshold", "60%", "-format", "%@", "info:"],
+              "measuring a render")
+    m = re.match(r"(\d+)x(\d+)\+(\d+)\+(\d+)", out.strip())
+    if not m:
+        return None
+    w, h, x, y = map(int, m.groups())
+    return x, y, x + w, y + h
+
+
+def make_spin(pcb, board, out, fast, work):
+    """An animated GIF: the board, rendered by KiCad, turning once on itself."""
+    n = 24 if fast else 36
+    size = (480, 360) if fast else (800, 600)
+    render = (int(size[0] * 1.5), int(size[1] * 1.5))  # cropped down afterwards
+    quality = "basic" if fast else "high"
+    zoom = 0.75
+
+    def frame(i):
+        png = work / f"spin-{i:03d}.png"
+        run(["kicad-cli", "pcb", "render", "-w", str(render[0]), "-h", str(render[1]),
+             "--quality", quality, "--background", "transparent", "--preset", "follow_pcb_editor",
+             "--rotate", f"{SPIN_TILT},0,{360 * i / n:.2f}", "--perspective", "--zoom", f"{zoom:g}",
+             "-o", str(png), str(pcb)], f"rendering frame {i + 1} of {n}")
+        if not png.exists():
+            raise Failure(f"kicad-cli wrote no image for frame {i + 1}")
+        return png
+
+    # Every frame is checked: a part that sticks out can leave the frame at one angle only.
+    for attempt in range(3):
+        with ThreadPoolExecutor(max_workers=min(8, os.cpu_count() or 2)) as ex:
+            frames = list(ex.map(frame, range(n)))
+        boxes = [opaque_box(f) for f in frames]
+        cut = any(b and (b[0] == 0 or b[1] == 0 or b[2] >= render[0] or b[3] >= render[1]) for b in boxes)
+        if not cut:
+            break
+        zoom *= 0.7
+    else:
+        say(f"the board still touches the frame at zoom {zoom / 0.7:.2f}")
+    boxes = [b for b in boxes if b]
+    if not boxes:
+        raise Failure("kicad-cli rendered nothing")
+    # One crop for every frame, the union of what they show: the board turns in place
+    # instead of being re-centred, and jumping, at each frame.
+    x0, y0 = min(b[0] for b in boxes), min(b[1] for b in boxes)
+    x1, y1 = max(b[2] for b in boxes), max(b[3] for b in boxes)
+    pad = int(0.04 * max(x1 - x0, y1 - y0))
+    crop = f"{x1 - x0 + 2 * pad}x{y1 - y0 + 2 * pad}+{x0 - pad}+{y0 - pad}"
+    style = Style(size[0] / 1100)
+    tb = board["title_block"]
+    caption = "  ·  ".join(x for x in (tb["title"] or pcb.stem, f"rev. {tb['rev']}" if tb["rev"] else "") if x)
+    band = style.px(64)
+
+    def finish(i_png):
+        i, png = i_png
+        dst = work / f"spin-final-{i:03d}.png"
+        run(["magick", str(png), "-background", "none", "-crop", crop, "+repage",
+             "-resize", f"{size[0]}x{size[1] - band}", "-background", PAPER, "-gravity", "center",
+             "-extent", f"{size[0]}x{size[1] - band}",
+             "(", "-size", f"{size[0]}x{band}", f"xc:{PAPER}",
+             "-font", style.regular, "-pointsize", str(style.px(30)), "-fill", GREY,
+             "-gravity", "center", "-annotate", "+0+0", caption, ")",
+             "-append", "-flatten", "+repage", str(dst)], f"framing frame {i + 1}")
+        return dst
+
+    with ThreadPoolExecutor(max_workers=min(8, os.cpu_count() or 2)) as ex:
+        finals = list(ex.map(finish, enumerate(frames)))
+    # One palette for the whole animation, taken from a few frames: per-frame palettes
+    # make the colours flicker as the board turns.
+    palette = work / "palette.png"
+    run(["magick", *map(str, finals[::max(1, n // 6)]), "+append", "-dither", "None",
+         "-colors", "255", "-unique-colors", str(palette)], "building the palette")
+    run(["magick", "-delay", str(round(100 * SPIN_SECONDS / n)), *map(str, finals),
+         "-dither", "None", "-remap", str(palette), "-loop", "0", "-layers", "Optimize", str(out)],
+        "assembling the animation")
+    return out
+
+
 def layer_caption(name, alias, tracks, nets):
     label = name if not alias or alias == name else f"{name} ({alias})"
     if name == "B.Cu":
@@ -652,16 +735,20 @@ examples:
   kishot hw/ -s layers -o /tmp      only the copper layers, written to /tmp
   kishot --open --workspace 11      open the images on Hyprland workspace 11
   kishot --diff HEAD~3              what changed in the copper since three commits ago
+  kishot -s spin                    an animated GIF of the board turning, for chat
 
 sheets:
   3d      six 3D views
   layers  every copper layer, pours hidden
   diff    every copper layer against an older git revision (--diff REV):
           red removed, green added, grey unchanged
+  spin    an animated GIF of the board turning once (one to two minutes; 10 s
+          with --fast)
   Without -s: 3d and layers, or only diff when --diff is given.
 
 output:
-  <board>-3d.png, <board>-layers.png, <board>-diff.png, in --out-dir; without it, in a
+  <board>-3d.png, <board>-layers.png, <board>-diff.png, <board>-spin.gif,
+  in --out-dir; without it, in a
   fabrication/ or fab/ directory next to the board if there is one, else next
   to the board. Each path written is printed on stdout, one per line.
 
@@ -702,8 +789,8 @@ def parse_args(argv):
     ap.add_argument("board", type=Path, nargs="?", default=Path("."),
                     help="a .kicad_pcb file, or a directory holding exactly one (default: .)")
     ap.add_argument("-s", "--sheet", choices=(*SHEETS, "all"), action="append",
-                    help="sheet to make, repeatable: 3d, layers, diff, all (default: 3d and layers, "
-                         "or diff alone with --diff)")
+                    help="sheet to make, repeatable: 3d, layers, diff, spin, all (default: 3d and "
+                         "layers, or diff alone with --diff)")
     ap.add_argument("-d", "--diff", metavar="REV",
                     help="compare the copper with the board at this git revision (a commit, "
                          "tag, branch, HEAD~1...)")
@@ -729,7 +816,7 @@ def main(argv=None):
     if not a.sheet:
         wanted = {"diff"} if a.diff else {"3d", "layers"}
     elif "all" in a.sheet:
-        wanted = {"3d", "layers"} | ({"diff"} if a.diff else set())
+        wanted = {"3d", "layers", "spin"} | ({"diff"} if a.diff else set())
     else:
         wanted = set(a.sheet)
     sheets = [s for s in SHEETS if s in wanted]
@@ -746,10 +833,12 @@ def main(argv=None):
             for s in sheets:
                 work = Path(t) / s
                 work.mkdir()
-                out = out_dir / f"{pcb.stem}-{s}.png"
+                out = out_dir / f"{pcb.stem}-{s}.{'gif' if s == 'spin' else 'png'}"
                 say(f"{s} sheet of {pcb.name}…")
                 if s == "diff":
                     written.append(make_diff(pcb, board, out, a.fast, work, a.diff))
+                elif s == "spin":
+                    written.append(make_spin(pcb, board, out, a.fast, work))
                 else:
                     make = make_3d if s == "3d" else make_layers
                     written.append(make(pcb, board, out, a.fast, work))

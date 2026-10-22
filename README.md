@@ -28,11 +28,17 @@ kishot my-board.kicad_pcb
 | **3D** | top, bottom, three three-quarter views and the profile, in the colours of the PCB editor (solder mask included), cut out on a light background |
 | **Copper layers** | every copper layer on its own, front to back, with the copper pours hidden so the routing shows; each one captioned with its track count and the net of its plane |
 | **Changes** | `--diff REV`: every copper layer against the board at an older git revision, removed copper in red, added in green, the rest in grey, each change ringed so a short track still shows; tracks and vias added and removed, per layer and in total |
+| **Turntable** | `-s spin`: an animated GIF of the board, rendered by KiCad, turning once on itself; chat apps play it inline |
 | **Header** | title, revision, date and company from the title block (the schematic's, when the board's is empty), board size, copper layers, footprints; the file name and KiCad version in the footer |
 | **For scripts** | stdout carries the paths written, one per line, and nothing else; progress and errors go to stderr; the exit status says whether every sheet was made |
 | **Opening** | `--open` shows the images once written; under Hyprland, `--workspace N` puts them on another workspace without leaving yours, and replaces an older window of the same image |
 
 ## A look at it
+
+<p align="center">
+  <img src="docs/images/spin.gif" alt="kishot's spin sheet: the RoyalBlue54L Feather, rendered by KiCad, turning once on itself above its shadow" width="70%">
+  <br><sub><code>kishot -s spin</code>: the board turning, as a GIF that Slack, Discord or a README play inline.</sub>
+</p>
 
 <p align="center">
   <img src="docs/images/3d.png" alt="kishot's 3D sheet of the RoyalBlue54L Feather: top, bottom, three three-quarter views and the profile, under a header with title, revision, date, maker, size, copper layers and footprints" width="100%">
@@ -91,11 +97,12 @@ kishot -o out/                      # write somewhere else
 kishot --open                       # open the images once written
 kishot --open --workspace 11        # Hyprland: on workspace 11, in the background
 kishot --diff HEAD~1                # what changed in the copper since the last commit
-kishot --diff v1.0 -s all           # the three sheets, the diff against tag v1.0
+kishot --diff v1.0 -s all           # every sheet, the diff against tag v1.0
+kishot -s spin                      # an animated GIF of the board turning
 ```
 
 ```text
-usage: kishot [-h] [-s {3d,layers,diff,all}] [-d REV] [-o DIR] [-f] [--open]
+usage: kishot [-h] [-s {3d,layers,diff,spin,all}] [-d REV] [-o DIR] [-f] [--open]
               [--workspace N] [--viewer CMD] [-V]
               [board]
 
@@ -104,8 +111,8 @@ positional arguments:
                         (default: .)
 
 options:
-  -s, --sheet {3d,layers,diff,all}
-                        sheet to make, repeatable: 3d, layers, diff, all
+  -s, --sheet {3d,layers,diff,spin,all}
+                        sheet to make, repeatable: 3d, layers, diff, spin, all
                         (default: 3d and layers, or diff alone with --diff)
   -d, --diff REV        compare the copper with the board at this git revision
                         (a commit, tag, branch, HEAD~1...)
@@ -119,12 +126,14 @@ options:
                         xdg-open)
 ```
 
-The images are `<board>-3d.png`, `<board>-layers.png` and `<board>-diff.png`. Without `--out-dir`, they go to a
+The images are `<board>-3d.png`, `<board>-layers.png`, `<board>-diff.png` and
+`<board>-spin.gif`. Without `--out-dir`, they go to a
 `fabrication/` or `fab/` directory next to the board if there is one, else next to the board.
 `KISHOT_WORKSPACE` and `KISHOT_VIEWER` set the defaults of the last two options.
 
 Timings, on a laptop (Ryzen AI 7 PRO 350, 8 cores) for the 8-layer board above: about 50 s for
-both sheets, 5 s with `--fast`. Nearly all of it is KiCad's ray tracer.
+both sheets, 5 s with `--fast`; the spin about two minutes (36 frames, floor and shadows), 10 s
+with `--fast` (24 frames). Nearly all of it is KiCad's ray tracer.
 
 ## For scripts
 
@@ -162,6 +171,12 @@ layer with its board outline to SVG (`kicad-cli pcb export svg --mode-single`), 
 mirrored, and rasterises it. Silkscreen and fabrication layers are left out on purpose: their
 text hides the tracks. A pour counts as a plane, and is named in the caption, when its outline
 covers at least 30 % of the board.
+
+**Spin.** 36 renders (24 with `--fast`), the board tilted and turned by 10° each time. Every
+frame is checked against the edges, as for the 3D sheet, since a part can leave the frame at one
+angle only. All frames are cut to the same box, the union of what they show, so the board turns
+in place instead of being re-centred at each frame, and share one palette, so the colours do not
+flicker. About 3 MB in high quality, under 1 MB with `--fast`.
 
 **Diff sheet.** `git show REV:<board>` gives the older board. Both versions lose their pour
 fill, each copper layer is exported from both in black and white, and both SVGs are framed on
