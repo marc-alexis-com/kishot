@@ -28,7 +28,7 @@ kishot my-board.kicad_pcb
 | **3D** | top, bottom, three three-quarter views and the profile, in the colours of the PCB editor (solder mask included), cut out on a light background |
 | **Copper layers** | every copper layer on its own, front to back, with the copper pours hidden so the routing shows; each one captioned with its track count and the net of its plane |
 | **Changes** | `--diff REV`: every copper layer against the board at an older git revision, removed copper in red, added in green, the rest in grey, each change ringed so a short track still shows; tracks and vias added and removed, per layer and in total |
-| **Turntable** | `-s spin`: an animated GIF of the board, rendered by KiCad, turning once on itself; chat apps play it inline |
+| **Turntable** | `-s spin`: the board, rendered by KiCad, turning once on itself at 20 frames a second, as three animated GIFs: on a light background with its name, transparent without text, and pixelated like a PS2 game; chat apps play them inline |
 | **Header** | title, revision, date and company from the title block (the schematic's, when the board's is empty), board size, copper layers, footprints; the file name and KiCad version in the footer |
 | **For scripts** | stdout carries the paths written, one per line, and nothing else; progress and errors go to stderr; the exit status says whether every sheet was made |
 | **Opening** | `--open` shows the images once written; under Hyprland, `--workspace N` puts them on another workspace without leaving yours, and replaces an older window of the same image |
@@ -36,8 +36,11 @@ kishot my-board.kicad_pcb
 ## A look at it
 
 <p align="center">
-  <img src="docs/images/spin.gif" alt="kishot's spin sheet: the RoyalBlue54L Feather, rendered by KiCad, turning once on itself above its shadow" width="70%">
-  <br><sub><code>kishot -s spin</code>: the board turning, as a GIF that Slack, Discord or a README play inline.</sub>
+  <img src="docs/images/spin.gif" alt="kishot's spin GIF: the RoyalBlue54L Feather, rendered by KiCad, turning once on itself, its name underneath" width="49%">
+  <img src="docs/images/spin-ps2.gif" alt="The same turn pixelated like a PS2 game, on the background of KiCad's 3D viewer" width="49%">
+  <br><sub><code>kishot -s spin</code>: the board turning, as GIFs that Slack, Discord or a README play
+  inline. The plain one and the PS2 one (shown here from <code>--fast</code>); a third, transparent and
+  without text, goes on any background.</sub>
 </p>
 
 <p align="center">
@@ -126,14 +129,15 @@ options:
                         xdg-open)
 ```
 
-The images are `<board>-3d.png`, `<board>-layers.png`, `<board>-diff.png` and
-`<board>-spin.gif`. Without `--out-dir`, they go to a
+The images are `<board>-3d.png`, `<board>-layers.png`, `<board>-diff.png`, and for the spin
+`<board>-spin.gif`, `<board>-spin-clear.gif` and `<board>-spin-ps2.gif`. Without `--out-dir`, they go to a
 `fabrication/` or `fab/` directory next to the board if there is one, else next to the board.
 `KISHOT_WORKSPACE` and `KISHOT_VIEWER` set the defaults of the last two options.
 
 Timings, on a laptop (Ryzen AI 7 PRO 350, 8 cores) for the 8-layer board above: about 50 s for
-both sheets, 5 s with `--fast`; the spin about two minutes (36 frames, floor and shadows), 10 s
-with `--fast` (24 frames). Nearly all of it is KiCad's ray tracer.
+both sheets, 5 s with `--fast`; the spin three to four minutes (96 frames with floor and shadows,
+about 2 GB of memory at its peak, 7 to 9 MB a GIF), 30 s with `--fast` (72 frames, about 2 MB a
+GIF). Nearly all of it is KiCad's ray tracer.
 
 ## For scripts
 
@@ -172,11 +176,18 @@ mirrored, and rasterises it. Silkscreen and fabrication layers are left out on p
 text hides the tracks. A pour counts as a plane, and is named in the caption, when its outline
 covers at least 30 % of the board.
 
-**Spin.** 36 renders (24 with `--fast`), the board tilted and turned by 10° each time. Every
-frame is checked against the edges, as for the 3D sheet, since a part can leave the frame at one
-angle only. All frames are cut to the same box, the union of what they show, so the board turns
-in place instead of being re-centred at each frame, and share one palette, so the colours do not
-flicker. About 3 MB in high quality, under 1 MB with `--fast`.
+**Spin.** 96 renders (72 with `--fast`), the board tilted and turned a little more each time:
+one turn in 4.8 s, 20 frames a second (14 with `--fast`). Every frame is checked against the
+edges, as for the 3D sheet, since a part can leave the frame at one angle only. All frames are
+cut to the same box, the union of what they show, so the board turns in place instead of being
+re-centred at each frame, and each GIF has one palette for all its frames, so the colours do not
+flicker. Three GIFs come out of the same renders:
+
+- `-spin.gif`, on a light background, the board's name underneath;
+- `-spin-clear.gif`, transparent and without text. GIF transparency is all or nothing, so the
+  shadow on the floor is left out and the edges are not smoothed against your background;
+- `-spin-ps2.gif`, drawn at a third of the size on the gradient of KiCad's 3D viewer, its colours
+  cut to 15 bits with an ordered dither, as the PS2 did, then enlarged by whole pixels.
 
 **Diff sheet.** `git show REV:<board>` gives the older board. Both versions lose their pour
 fill, each copper layer is exported from both in black and white, and both SVGs are framed on

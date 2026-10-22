@@ -2,9 +2,11 @@
 
 ## 0.3.0 — 2026-10-22
 
-- **`-s spin`**: an animated GIF of the board, rendered by KiCad, turning once on itself (36
-  frames, 24 with `--fast`). Frames that touch the edge make the whole turn zoom out; one crop
-  and one palette for every frame. Part of `-s all`, not of the default.
+- **`-s spin`**: the board, rendered by KiCad, turning once on itself, as three animated GIFs
+  from the same renders: on a light background with its name, transparent without text
+  (`-clear`), and pixelated like a PS2 game (`-ps2`). 96 frames, 20 a second (72 and 14 with
+  `--fast`). Frames that touch the edge make the whole turn zoom out; one crop and one palette
+  for every frame. Part of `-s all`, not of the default.
 
 ## 0.2.0 — 2026-10-22
 

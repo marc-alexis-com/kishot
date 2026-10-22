@@ -392,11 +392,25 @@ def opaque_box(png):
     return x, y, x + w, y + h
 
 
+# KiCad's 3D viewer background, for the PS2 version.
+VIEWER_TOP, VIEWER_BOTTOM = "#ccccE6", "#666680"
+
+
+def gif(frames, out, delay, transparent=False):
+    """Frames to an animated GIF with one palette for all of them (`+remap`): per-frame
+    palettes make the colours flicker as the board turns."""
+    run(["magick", "-delay", str(delay), "-dispose", "Background" if transparent else "None",
+         *map(str, frames), "-dither", "None", "+remap", "-loop", "0",
+         *([] if transparent else ["-layers", "Optimize"]), str(out)], f"assembling {out.name}")
+    return out
+
+
 def make_spin(pcb, board, out, fast, work):
-    """An animated GIF: the board, rendered by KiCad, turning once on itself."""
-    n = 24 if fast else 36
+    """Three animated GIFs from one turn rendered by KiCad: on a light background with the
+    board's name, transparent without text, and pixelated in the manner of a PS2 game."""
+    n = 72 if fast else 96  # 14 and 20 frames a second
     size = (480, 360) if fast else (800, 600)
-    render = (int(size[0] * 1.5), int(size[1] * 1.5))  # cropped down afterwards
+    render = (int(size[0] * 1.25), int(size[1] * 1.25))  # cropped down afterwards
     quality = "basic" if fast else "high"
     zoom = 0.75
 
@@ -429,35 +443,43 @@ def make_spin(pcb, board, out, fast, work):
     x0, y0 = min(b[0] for b in boxes), min(b[1] for b in boxes)
     x1, y1 = max(b[2] for b in boxes), max(b[3] for b in boxes)
     pad = int(0.04 * max(x1 - x0, y1 - y0))
-    crop = f"{x1 - x0 + 2 * pad}x{y1 - y0 + 2 * pad}+{x0 - pad}+{y0 - pad}"
+    crop = ["-crop", f"{x1 - x0 + 2 * pad}x{y1 - y0 + 2 * pad}+{x0 - pad}+{y0 - pad}", "+repage"]
     style = Style(size[0] / 1100)
     tb = board["title_block"]
     caption = "  ·  ".join(x for x in (tb["title"] or pcb.stem, f"rev. {tb['rev']}" if tb["rev"] else "") if x)
     band = style.px(64)
+    w, h = size
+    k = 3  # the PS2 version is drawn at a third of the size, then enlarged by whole pixels
 
     def finish(i_png):
         i, png = i_png
-        dst = work / f"spin-final-{i:03d}.png"
-        run(["magick", str(png), "-background", "none", "-crop", crop, "+repage",
-             "-resize", f"{size[0]}x{size[1] - band}", "-background", PAPER, "-gravity", "center",
-             "-extent", f"{size[0]}x{size[1] - band}",
-             "(", "-size", f"{size[0]}x{band}", f"xc:{PAPER}",
+        plain, clear, ps2 = (work / f"{v}-{i:03d}.png" for v in ("plain", "clear", "ps2"))
+        run(["magick", str(png), "-background", "none", *crop,
+             "-resize", f"{w}x{h - band}", "-background", PAPER, "-gravity", "center",
+             "-extent", f"{w}x{h - band}",
+             "(", "-size", f"{w}x{band}", f"xc:{PAPER}",
              "-font", style.regular, "-pointsize", str(style.px(30)), "-fill", GREY,
              "-gravity", "center", "-annotate", "+0+0", caption, ")",
-             "-append", "-flatten", "+repage", str(dst)], f"framing frame {i + 1}")
-        return dst
+             "-append", "-flatten", "+repage", str(plain)], f"framing frame {i + 1}")
+        # GIF transparency is all or nothing: the shadow on the floor goes, the board stays.
+        run(["magick", str(png), "-background", "none", *crop, "-resize", f"{w}x{h}",
+             "-gravity", "center", "-extent", f"{w}x{h}",
+             "-channel", "A", "-threshold", "50%", "+channel", "+repage", str(clear)],
+            f"cutting out frame {i + 1}")
+        run(["magick", "-size", f"{w // k}x{h // k}", f"gradient:{VIEWER_TOP}-{VIEWER_BOTTOM}",
+             "(", str(png), "-background", "none", *crop, "-resize", f"{w // k}x{h // k}", ")",
+             "-gravity", "center", "-compose", "over", "-composite",
+             # 32 levels a channel with a 4x4 ordered dither: the PS2's 15-bit frame buffer.
+             "-ordered-dither", "o4x4,32", "-scale", f"{k * 100}%", "+repage", str(ps2)],
+            f"pixelating frame {i + 1}")
+        return plain, clear, ps2
 
     with ThreadPoolExecutor(max_workers=min(8, os.cpu_count() or 2)) as ex:
-        finals = list(ex.map(finish, enumerate(frames)))
-    # One palette for the whole animation, taken from a few frames: per-frame palettes
-    # make the colours flicker as the board turns.
-    palette = work / "palette.png"
-    run(["magick", *map(str, finals[::max(1, n // 6)]), "+append", "-dither", "None",
-         "-colors", "255", "-unique-colors", str(palette)], "building the palette")
-    run(["magick", "-delay", str(round(100 * SPIN_SECONDS / n)), *map(str, finals),
-         "-dither", "None", "-remap", str(palette), "-loop", "0", "-layers", "Optimize", str(out)],
-        "assembling the animation")
-    return out
+        done = list(ex.map(finish, enumerate(frames)))
+    delay = round(100 * SPIN_SECONDS / n)
+    return [gif([d[0] for d in done], out, delay),
+            gif([d[1] for d in done], out.with_name(f"{out.stem}-clear.gif"), delay, transparent=True),
+            gif([d[2] for d in done], out.with_name(f"{out.stem}-ps2.gif"), delay)]
 
 
 def layer_caption(name, alias, tracks, nets):
@@ -742,13 +764,14 @@ sheets:
   layers  every copper layer, pours hidden
   diff    every copper layer against an older git revision (--diff REV):
           red removed, green added, grey unchanged
-  spin    an animated GIF of the board turning once (one to two minutes; 10 s
-          with --fast)
+  spin    the board turning once, three animated GIFs: on a light background
+          with its name, transparent without text (-clear), and pixelated
+          like a PS2 game (-ps2); a few minutes, 20 s with --fast
   Without -s: 3d and layers, or only diff when --diff is given.
 
 output:
   <board>-3d.png, <board>-layers.png, <board>-diff.png, <board>-spin.gif,
-  in --out-dir; without it, in a
+  <board>-spin-clear.gif, <board>-spin-ps2.gif, in --out-dir; without it, in a
   fabrication/ or fab/ directory next to the board if there is one, else next
   to the board. Each path written is printed on stdout, one per line.
 
@@ -836,13 +859,14 @@ def main(argv=None):
                 out = out_dir / f"{pcb.stem}-{s}.{'gif' if s == 'spin' else 'png'}"
                 say(f"{s} sheet of {pcb.name}…")
                 if s == "diff":
-                    written.append(make_diff(pcb, board, out, a.fast, work, a.diff))
+                    made = [make_diff(pcb, board, out, a.fast, work, a.diff)]
                 elif s == "spin":
-                    written.append(make_spin(pcb, board, out, a.fast, work))
+                    made = make_spin(pcb, board, out, a.fast, work)
                 else:
-                    make = make_3d if s == "3d" else make_layers
-                    written.append(make(pcb, board, out, a.fast, work))
-                print(out, flush=True)
+                    made = [(make_3d if s == "3d" else make_layers)(pcb, board, out, a.fast, work)]
+                for path in made:
+                    print(path, flush=True)
+                written += made
     except Failure as e:
         say(str(e))
         return 1
