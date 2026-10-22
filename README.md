@@ -28,7 +28,7 @@ kishot my-board.kicad_pcb
 | **3D** | top, bottom, three three-quarter views and the profile, in the colours of the PCB editor (solder mask included), cut out on a light background |
 | **Copper layers** | every copper layer on its own, front to back, with the copper pours hidden so the routing shows; each one captioned with its track count, length and the net of its plane; the header adds the total length, vias, narrowest track and net classes |
 | **One net** | `--net GND`: one net in its layer's colour on every layer, the rest of the copper in grey; its tracks, length, vias and pads |
-| **Design rules** | `--drc`: KiCad's DRC runs first; errors and warnings in every header, ringed on the copper layers |
+| **Design rules** | `--drc`: KiCad's DRC runs first; errors and warnings in every header, ringed on the copper layers (errors in magenta, warnings in orange) |
 | **Changes** | `--diff REV`, against the board at an older git revision. The copper, layer by layer: removed in red, added in green, the rest in grey, each change ringed so a short track still shows, with tracks and vias added and removed. The schematic, page by page, the same way, with a close-up of each change. The 3D views before and after, side by side, with what changed ringed. And a GIF that fades from one to the other, so a moved part blinks |
 | **Notes** | `--note "for the review of 23/10"`: a line of your own at the head of every sheet |
 | **Turntable** | `-s spin`: the board, rendered by KiCad, turning once on itself at 20 frames a second, as three animated GIFs: on a light background with its name, transparent without text, and pixelated like a PS2 game; chat apps play them inline |
@@ -246,7 +246,8 @@ flicker. Three GIFs come out of the same renders:
 **Design rules.** `--drc` runs `kicad-cli pcb drc` on the board with the project's own rules,
 errors and warnings (exclusions left out). Each violation's first item gives a position, and its
 description the layer ("Track on F.Cu", or the layer's user name): it is ringed there, thick and
-red for an error, thin and orange for a warning, on every layer when it names none. The counts are
+magenta for an error (no copper layer of KiCad's default theme uses it, so a ring shows even on
+red F.Cu), thin and orange for a warning, on every layer when it names none. The counts are
 KiCad's: a demo board whose vias are finer than its own drill rule shows hundreds of errors.
 
 **One net.** `--net` takes the exact name, the name in any case, or its last part (`VBAT` for

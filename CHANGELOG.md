@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- DRC errors are ringed in magenta, not red: on F.Cu, red rings disappeared in the copper.
 - README: a tour (`tour.gif`, one slide per feature, the command above its output) and an
   overview (`features.png`), built by `docs/images/showcase.py` from KiCad's RoyalBlue54L demo
   and a scripted review round; the full-size sheets folded under them.

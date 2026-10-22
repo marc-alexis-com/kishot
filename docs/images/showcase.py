@@ -2,7 +2,7 @@
 
     nix develop -c python3 docs/images/showcase.py docs/images [--demo DIR] [--quality] [--keep DIR]
 
-Needs kicad-cli, ImageMagick, git and Pillow (the flake's dev shell has them all).
+Needs kicad-cli, ImageMagick, git, numpy and Pillow (the flake's dev shell has them all).
 It copies KiCad's RoyalBlue54L Feather demo project to a scratch git repository, commits it,
 then edits a copy the way a review round would (tracks removed on F.Cu, a switch moved, a
 capacitor's value changed in the schematic) and commits that too. kishot then makes every
@@ -25,6 +25,7 @@ import sys
 import tempfile
 from pathlib import Path
 
+import numpy as np
 from PIL import Image, ImageDraw, ImageFont, ImageSequence
 
 HERE = Path(__file__).resolve().parent
@@ -144,52 +145,158 @@ def slide_base(command, caption):
     return img
 
 
+AREA = (W - 32, H - BAR - 24)  # where a slide shows its picture
+HIGHLIGHT = "#f59e0b"
+
+
+def hexrgb(h):
+    return np.array([int(h[i:i + 2], 16) for i in (1, 3, 5)], np.int16)
+
+
+def best_window(mask, frac, aspect):
+    """The window `frac` of the picture's width, at `aspect`, holding the most of `mask`,
+    then centred on what it holds. None when the mask is empty."""
+    if not mask.any():
+        return None
+    h, w = mask.shape
+    s = max(1, w // 400)
+    m = mask[:h // s * s, :w // s * s].reshape(h // s, s, w // s, s).any(axis=(1, 3))
+    mh, mw = m.shape
+    ww = max(4, int(mw * frac))
+    wh = max(4, int(ww / aspect))
+    if wh > mh:
+        wh, ww = mh, int(mh * aspect)
+    ii = np.zeros((mh + 1, mw + 1), np.int64)
+    ii[1:, 1:] = m.cumsum(0).cumsum(1)
+    sums = ii[wh:, ww:] - ii[:-wh, ww:] - ii[wh:, :-ww] + ii[:-wh, :-ww]
+    y, x = np.unravel_index(np.argmax(sums), sums.shape)
+    ys, xs = np.nonzero(m[y:y + wh, x:x + ww])
+    cx, cy = x + xs.mean(), y + ys.mean()
+    x0 = int(min(max(cx - ww / 2, 0), mw - ww))
+    y0 = int(min(max(cy - wh / 2, 0), mh - wh))
+    return x0 * s, y0 * s, (x0 + ww) * s, (y0 + wh) * s
+
+
+def colour_mask(img, colours, tol=45):
+    a = np.asarray(img.convert("RGB"), np.int16)
+    mask = np.zeros(a.shape[:2], bool)
+    for c in colours:
+        mask |= np.abs(a - hexrgb(c)).sum(-1) < tol
+    return mask
+
+
+def motion_mask(a, b, tol=60):
+    x = np.asarray(a.convert("RGB"), np.int16)
+    y = np.asarray(b.convert("RGB"), np.int16)
+    return np.abs(x - y).sum(-1) > tol
+
+
+def pad_to(img, aspect, colour=PAPER):
+    """The picture centred on a canvas of the slide's aspect, and where it went."""
+    w, h = img.size
+    if w / h < aspect:
+        cw, ch = int(h * aspect), h
+    else:
+        cw, ch = w, int(w / aspect)
+    canvas = Image.new("RGBA", (cw, ch), colour)
+    ox, oy = (cw - w) // 2, (ch - h) // 2
+    canvas.paste(img, (ox, oy), img)
+    return canvas, (ox, oy)
+
+
+def view(canvas, box, target=None, base=None, width=4):
+    """The slide frame showing `box` of the canvas, `target` outlined."""
+    pic = canvas.crop(tuple(int(v) for v in box)).resize(AREA, Image.LANCZOS)
+    frame = base.copy()
+    frame.paste(pic, (16, BAR + 12), pic)
+    if target:
+        k = AREA[0] / (box[2] - box[0])
+        x0, y0 = 16 + (target[0] - box[0]) * k, BAR + 12 + (target[1] - box[1]) * k
+        x1, y1 = 16 + (target[2] - box[0]) * k, BAR + 12 + (target[3] - box[1]) * k
+        ImageDraw.Draw(frame).rectangle([max(14, x0), max(BAR + 10, y0), min(W - 14, x1), min(H - 10, y1)],
+                                         outline=HIGHLIGHT, width=width)
+    return frame
+
+
+def ease(t):
+    return t * t * (3 - 2 * t)
+
+
+def focus_of(spec, frames):
+    """Where the eye should go on this output, in its own pixels; None for the whole of it."""
+    focus = spec.get("focus")
+    if not focus:
+        return None
+    aspect = AREA[0] / AREA[1]
+    if focus == "motion":
+        mask = motion_mask(frames[0][0], frames[len(frames) // 2][0])
+        return best_window(mask, spec.get("frac", 0.4), aspect)
+    return best_window(colour_mask(frames[0][0], focus), spec.get("frac", 0.25), aspect)
+
+
 def slide(spec, out):
-    """The frames of one slide: (RGB image, duration ms)."""
-    command, caption, name, crop, hold, backdrop = spec
-    base = slide_base(command, caption)
-    area = (W - 32, H - BAR - 24)
-    frames = frames_of(out / name)
-    step = max(1, len(frames) // 36)  # long animations are thinned for the tour
+    """The frames of one slide: (RGB image, duration ms). A slide with a focus shows the whole
+    output with the focus outlined, then zooms in on it and stays there."""
+    base = slide_base(spec["command"], spec["caption"])
+    frames = frames_of(out / spec["file"])
+    target = focus_of(spec, frames)
+    aspect = AREA[0] / AREA[1]
+    backdrop = spec.get("backdrop")
     result = []
-    for img, ms in frames[::step]:
-        pic = fit(img, area, crop)
-        frame = base.copy()
-        x, y = (W - pic.width) // 2, BAR + 12 + (area[1] - pic.height) // 2
-        if backdrop == "checker":
-            frame.paste(checkerboard(pic.size), (x, y))
-        frame.paste(pic, (x, y), pic)
-        result.append((frame, ms * step))
-    if len(result) == 1:
-        result[0] = (result[0][0], hold)
+    if len(frames) > 1:  # an animation: played in place, on its focus when it has one
+        step = max(1, len(frames) // 36)  # long animations are thinned for the tour
+        for img, ms in frames[::step]:
+            if target:
+                img = img.crop(target)
+            canvas, _ = pad_to(img, aspect, "#00000000" if backdrop == "checker" else PAPER)
+            if backdrop == "checker":
+                board = checkerboard(canvas.size).convert("RGBA")
+                board.alpha_composite(canvas)
+                canvas = board
+            result.append((view(canvas, (0, 0) + canvas.size, base=base), ms * step))
+        return result
+    canvas, (ox, oy) = pad_to(frames[0][0], aspect)
+    whole = (0, 0) + canvas.size
+    if not target:
+        return [(view(canvas, whole, base=base), spec.get("hold", 2600))]
+    t = (target[0] + ox, target[1] + oy, target[2] + ox, target[3] + oy)
+    result.append((view(canvas, whole, t, base), 1400))
+    steps = 7
+    for i in range(1, steps + 1):
+        k = ease(i / steps)
+        box = tuple(a + (b - a) * k for a, b in zip(whole, t))
+        result.append((view(canvas, box, t, base), 60))
+    result[-1] = (result[-1][0], spec.get("hold", 2600))
     return result
 
 
 def slides(stem):
-    """(command, caption, file, crop (fractions) or None, hold ms, backdrop)."""
+    """Every slide: the command, a caption, the output file, and where to look (colours to find,
+    "motion" for what moves in an animation, or nothing for the whole picture)."""
+    removed_added = ["#d0342c", "#2e9e4a"]
     return [
-        ("kishot board.kicad_pcb", "six 3D views, in the PCB editor's colours, under the title block",
-         f"{stem}-3d.png", None, 2600, None),
-        ("kishot board.kicad_pcb", "every copper layer, pours hidden: tracks, lengths, plane nets",
-         f"{stem}-layers.png", None, 2600, None),
-        ("kishot --drc", "KiCad's DRC: counts in the header, each violation ringed where it is",
-         f"{stem}-layers.png", (0.0, 0.0, 0.333, 0.37), 2600, None),
-        ("kishot --net VBUS", "one net in colour on every layer, the rest of the copper in grey",
-         f"{stem}-net-VBUS.png", (0.0, 0.0, 0.333, 0.37), 2600, None),
-        ("kishot --diff HEAD~1", "the copper against an older commit: red removed, green added",
-         f"{stem}-diff.png", (0.0, 0.0, 0.333, 0.37), 2600, None),
-        ("kishot --diff HEAD~1", "the schematic too, with a close-up of every change",
-         f"{stem}-sch-diff.png", (0.0, 0.66, 0.5, 1.0), 2800, None),
-        ("kishot --diff HEAD~1", "3D before and after, what moved ringed in red",
-         f"{stem}-3d-diff.png", (0.0, 0.0, 1.0, 0.56), 2600, None),
-        ("kishot --diff HEAD~1", "and a GIF that fades from one version to the other",
-         f"{stem}-fade.gif", None, 0, None),
-        ("kishot -s spin", "the board turning, rendered by KiCad, as a GIF for chat",
-         f"{stem}-spin.gif", None, 0, None),
-        ("kishot -s spin", "the same turn, transparent, for any background",
-         f"{stem}-spin-clear.gif", None, 0, "checker"),
-        ("kishot -s spin", "and pixelated like a PS2 game",
-         f"{stem}-spin-ps2.gif", None, 0, None),
+        dict(command="kishot board.kicad_pcb", file=f"{stem}-3d.png",
+             caption="six 3D views, in the PCB editor's colours, under the title block"),
+        dict(command="kishot board.kicad_pcb", file=f"{stem}-layers.png",
+             caption="every copper layer, pours hidden: tracks, lengths, plane nets"),
+        dict(command="kishot --drc", file=f"{stem}-layers.png", focus=["#d000d0"], frac=0.2,
+             caption="KiCad's DRC: counts in the header, each violation ringed where it is"),
+        dict(command="kishot --net VBUS", file=f"{stem}-net-VBUS.png", focus=["#c83434"], frac=0.2,
+             caption="one net in colour on every layer, the rest of the copper in grey"),
+        dict(command="kishot --diff HEAD~1", file=f"{stem}-diff.png", focus=removed_added, frac=0.16,
+             caption="the copper against an older commit: red removed, green added"),
+        dict(command="kishot --diff HEAD~1", file=f"{stem}-sch-diff.png", focus=removed_added, frac=0.3,
+             caption="the schematic too, with a close-up of every change", hold=3000),
+        dict(command="kishot --diff HEAD~1", file=f"{stem}-3d-diff.png", focus=["#d0342c"], frac=0.25,
+             caption="3D before and after, what moved ringed in red"),
+        dict(command="kishot --diff HEAD~1", file=f"{stem}-fade.gif", focus="motion", frac=0.35,
+             caption="and a GIF that fades from one version to the other: the switch moved"),
+        dict(command="kishot -s spin", file=f"{stem}-spin.gif",
+             caption="the board turning, rendered by KiCad, as a GIF for chat"),
+        dict(command="kishot -s spin", file=f"{stem}-spin-clear.gif", backdrop="checker",
+             caption="the same turn, transparent, for any background"),
+        dict(command="kishot -s spin", file=f"{stem}-spin-ps2.gif",
+             caption="and pixelated like a PS2 game"),
     ]
 
 
@@ -212,15 +319,19 @@ def stdout_slide(paths):
     return [(img, 3200)]
 
 
-def save_gif(frames, path):
-    """One palette per slide (taken from its first frame), so an animation does not flicker."""
+def save_gif(slides_frames, path):
+    """One palette per slide, from its first and last frames together: an animation does not
+    flicker, and a close-up keeps colours that were a few pixels in the whole view."""
     out, durations = [], []
-    palette = None
-    for img, ms in frames:
-        if getattr(img, "_new_slide", False) or palette is None:
-            palette = img.quantize(colors=255, method=Image.Quantize.MEDIANCUT)
-        out.append(img.quantize(palette=palette, dither=Image.Dither.NONE))
-        durations.append(max(20, ms))
+    for frames in slides_frames:
+        first, last = frames[0][0], frames[-1][0]
+        both = Image.new("RGB", (first.width, first.height * 2))
+        both.paste(first, (0, 0))
+        both.paste(last, (0, first.height))
+        palette = both.quantize(colors=255, method=Image.Quantize.MEDIANCUT)
+        for img, ms in frames:
+            out.append(img.quantize(palette=palette, dither=Image.Dither.NONE))
+            durations.append(max(20, ms))
     out[0].save(path, save_all=True, append_images=out[1:], duration=durations, loop=0, optimize=True)
     # Most of a slide does not move: keep only what changes from one frame to the next.
     subprocess.run(["magick", str(path), "-layers", "Optimize", str(path)], check=True)
@@ -240,22 +351,15 @@ def written_paths(out):
 
 
 def tour(out, dest):
-    frames = []
-    for spec in slides(BOARD):
-        s = slide(spec, out)
-        s[0][0]._new_slide = True
-        frames += s
-    s = stdout_slide(written_paths(out))
-    s[0][0]._new_slide = True
-    frames += s
-    save_gif(frames, dest / "tour.gif")
+    groups = [slide(spec, out) for spec in slides(BOARD)]
+    groups.append(stdout_slide(written_paths(out)))
+    save_gif(groups, dest / "tour.gif")
 
 
 def features(out, dest):
-    """All the features at a glance: a grid of captioned thumbnails."""
-    specs = slides(BOARD)
-    specs = specs + [("kishot -s all --diff HEAD~1 --net VBUS", "for scripts: stdout is the paths written, one per line",
-                      None, None, 0, "terminal")]
+    """All the features at a glance: a grid of captioned thumbnails, each on what it shows."""
+    specs = slides(BOARD) + [dict(command="kishot -s all --diff HEAD~1 --net VBUS", backdrop="terminal",
+                                  caption="for scripts: stdout is the paths written, one per line")]
     cols, cw, ch, gap = 4, 400, 300, 92
     rows = (len(specs) + cols - 1) // cols
     head = 96
@@ -263,22 +367,32 @@ def features(out, dest):
     d = ImageDraw.Draw(sheet)
     d.text((24, 24), "kishot", font=font("DejaVu Sans:bold", 40), fill=INK)
     d.text((170, 40), "every sheet, from one demo board and one command each", font=SANS, fill=GREY)
-    for i, (command, caption, name, crop, _, backdrop) in enumerate(specs):
+    for i, spec in enumerate(specs):
         x, y = 20 + (i % cols) * cw, head + (i // cols) * (ch + gap)
         d.rectangle([x + 4, y, x + cw - 4, y + ch], fill=PAPER)
-        if backdrop == "terminal":
+        if spec.get("backdrop") == "terminal":
             terminal(sheet, [x + 16, y + 16, x + cw - 16, y + ch - 16], written_paths(out), size=13)
         else:
-            img = frames_of(out / name)
+            frames = frames_of(out / spec["file"])
             # The fade's first frame is the older board, whole; a spin's third is a nice angle.
-            pic = fit(img[0 if "fade" in name else len(img) // 3][0], (cw - 24, ch - 24), crop)
+            img = frames[0 if "fade" in spec["file"] else len(frames) // 3][0]
+            target = focus_of(spec, frames)
+            if target:
+                img = img.crop(target)
+            pic = fit(img, (cw - 24, ch - 24))
             px, py = x + (cw - pic.width) // 2, y + (ch - pic.height) // 2
-            if backdrop == "checker":
+            if spec.get("backdrop") == "checker":
                 sheet.paste(checkerboard(pic.size), (px, py))
             sheet.paste(pic, (px, py), pic)
+            if target and len(frames) == 1:
+                d.text((x + 12, y + 8), "close-up", font=SANS_SMALL, fill=HIGHLIGHT)
         d.rectangle([x + 4, y + ch, x + cw - 4, y + ch + 30], fill=EDITOR)
-        d.text((x + 14, y + ch + 5), "$ " + command, font=font("DejaVu Sans Mono", 16), fill=COMMAND)
-        words, line, lines = caption.split(), "", []
+        size = 16
+        while size > 10 and d.textlength("$ " + spec["command"], font=font("DejaVu Sans Mono", size)) > cw - 28:
+            size -= 1
+        d.text((x + 14, y + ch + 5 + (16 - size) // 2), "$ " + spec["command"],
+               font=font("DejaVu Sans Mono", size), fill=COMMAND)
+        words, line, lines = spec["caption"].split(), "", []
         for w_ in words:
             if d.textlength(line + " " + w_, font=SANS_SMALL) > cw - 24:
                 lines.append(line)

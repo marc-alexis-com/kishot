@@ -677,7 +677,9 @@ def mark(png, points, box, severity_colours, radius):
     run(["magick", str(png), "-fill", "none", *draw, str(png)], "marking DRC violations")
 
 
-DRC_COLOURS = {"error": "#e11d48", "warning": "#f59e0b"}
+# Magenta: no copper layer of KiCad's default theme comes near it, so a ring on red F.Cu
+# copper still shows.
+DRC_COLOURS = {"error": "#d000d0", "warning": "#f59e0b"}
 
 
 def make_layers(pcb, board, out, fast, work):
@@ -707,7 +709,7 @@ def make_layers(pcb, board, out, fast, work):
     columns = 2 if len(layers) <= 4 else math.ceil(math.sqrt(len(layers)))
     details = board_details(board) + stats_details(board)
     if drc and drc["markers"]:
-        details.append("DRC errors ringed in red, warnings in orange")
+        details.append("DRC errors ringed in magenta, warnings in orange")
     return sheet(tiles, columns, header(pcb, board, "copper layers, pours hidden", details), out, style, work)
 
 
