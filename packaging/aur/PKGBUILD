@@ -1,0 +1,32 @@
+# Maintainer: Marc-Alexis <contact at marc-alexis dot com>
+pkgname=kishot
+pkgver=0.5.0
+pkgrel=1
+pkgdesc="Presentation sheets of a KiCad board: 3D views, copper layers, diffs, BOM, Gerbers"
+arch=('any')
+url="https://github.com/marc-alexis-com/kishot"
+license=('MIT')
+depends=('python' 'imagemagick' 'kicad' 'fontconfig' 'ttf-dejavu')
+makedepends=('python-build' 'python-installer' 'python-setuptools' 'python-wheel')
+optdepends=('ffmpeg: the spin as an MP4'
+            'gerbv: the gerbers sheet'
+            'git: --diff'
+            'swayimg: --open and --workspace')
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('SKIP')  # updpkgsums once the tag is published
+
+build() {
+  cd "$pkgname-$pkgver"
+  python -m build --wheel --no-isolation
+}
+
+check() {
+  cd "$pkgname-$pkgver"
+  python -m unittest discover -s tests
+}
+
+package() {
+  cd "$pkgname-$pkgver"
+  python -m installer --destdir="$pkgdir" dist/*.whl
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

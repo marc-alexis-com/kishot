@@ -1,7 +1,28 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 — 2026-10-24
 
+- **New sheets**: `xray` (every copper layer at once, in its colour, half transparent),
+  `silk` (the silkscreen as printed, cut by the mask), `assembly` (the fabrication layers'
+  references, values hidden), `bom` (each fitted part numbered on the board, the list grouped
+  by value and footprint), `dims` (the outline dimensioned, the mounting holes placed),
+  `stackup` (layers, thicknesses, materials, εr, finish), `gerbers` (the Gerbers and drill file
+  drawn by gerbv and stacked into a board, in the stackup's mask colour and finish) and `print`
+  (PDFs at 1:1, the back one mirrored, to lay the real parts on). All in `-s all`; `gerbers`
+  only when gerbv is there, `stackup` only when the board has one.
+- **Spin**: a transparent WebP with soft edges and the shadow, and an MP4 (two turns) when
+  ffmpeg is there. `--frames`, `--seconds`, `--tilt`, and `--swing DEG` for a pendulum.
+- **`--theme dark`**, for every sheet.
+- **`--variant NAME`** (KiCad 10), passed to every render and export.
+- **Several boards** in one command, **`-r`** for every board under a directory; a failing
+  board does not stop the others.
+- **`--json`**: one object on stdout, the paths written and the board's figures.
+- **`--watch`**: the sheets made again at each save, by polling, without inotify.
+- **`.kishot.toml`**: defaults for the options, found next to the board or above it.
+- **GitHub Action** (`action.yml`): the diff sheets in a pull request comment, updated in place.
+- Packaging recipes for PyPI (`release.yml`, trusted publishing), the AUR and nixpkgs, in
+  `packaging/`; nothing is published yet.
+- The Nix package brings ffmpeg and gerbv.
 - DRC errors are ringed in magenta, not red: on F.Cu, red rings disappeared in the copper.
 - README: a tour (`tour.gif`, one slide per feature, the command above its output) and an
   overview (`features.png`), built by `docs/images/showcase.py` from KiCad's RoyalBlue54L demo

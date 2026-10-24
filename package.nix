@@ -1,4 +1,4 @@
-{ lib, stdenvNoCC, makeWrapper, python3, imagemagick, fontconfig, kicad
+{ lib, stdenvNoCC, makeWrapper, python3, imagemagick, fontconfig, ffmpeg-headless, gerbv, kicad
 , withKicad ? true }:
 
 # kicad-cli is appended to PATH, not prepended: a KiCad already installed on
@@ -13,7 +13,7 @@ stdenvNoCC.mkDerivation {
     install -Dm755 kishot.py $out/libexec/kishot/kishot.py
     makeWrapper ${python3}/bin/python3 $out/bin/kishot \
       --add-flags $out/libexec/kishot/kishot.py \
-      --prefix PATH : ${lib.makeBinPath [ imagemagick fontconfig ]} \
+      --prefix PATH : ${lib.makeBinPath [ imagemagick fontconfig ffmpeg-headless gerbv ]} \
       ${lib.optionalString withKicad "--suffix PATH : ${lib.makeBinPath [ kicad ]}"}
   '';
   meta = {

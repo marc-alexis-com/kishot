@@ -1,0 +1,50 @@
+name: kishot diff
+description: Comment a pull request with what changed on a KiCad board, copper, schematic and 3D, drawn by kishot
+author: Marc-Alexis
+branding:
+  icon: cpu
+  color: blue
+
+inputs:
+  board:
+    description: The .kicad_pcb file, or a directory holding exactly one
+    default: "."
+  base:
+    description: The revision to compare with; by default the base of the pull request
+    default: ""
+  sheets:
+    description: The sheets to make, separated by spaces
+    default: "diff sch-diff 3d-diff"
+  args:
+    description: More options for kishot
+    default: "--fast"
+  branch:
+    description: The branch the images are pushed to, so that the comment can show them
+    default: "kishot-images"
+  token:
+    description: A token that may push to the branch and comment on the pull request
+    default: ${{ github.token }}
+
+outputs:
+  report:
+    description: kishot's JSON report
+    value: ${{ steps.kishot.outputs.report }}
+
+runs:
+  using: composite
+  steps:
+    - uses: cachix/install-nix-action@v31
+    - id: kishot
+      shell: bash
+      env:
+        KISHOT_ACTION: ${{ github.action_path }}
+        BOARD: ${{ inputs.board }}
+        BASE: ${{ inputs.base }}
+        SHEETS: ${{ inputs.sheets }}
+        ARGS: ${{ inputs.args }}
+        BRANCH: ${{ inputs.branch }}
+        GH_TOKEN: ${{ inputs.token }}
+        PR: ${{ github.event.pull_request.number }}
+        BASE_REF: ${{ github.event.pull_request.base.ref }}
+        HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      run: bash "$KISHOT_ACTION/.github/kishot-comment.sh"

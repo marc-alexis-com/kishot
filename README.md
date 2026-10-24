@@ -13,7 +13,8 @@
 </p>
 
 **`kishot`** turns a KiCad board into sheets you can send: one PNG of six 3D views, one PNG
-of the tracks on every copper layer, each under a header that says what the board is. One
+of the tracks on every copper layer, each under a header that says what the board is; and on
+demand, what a review or a fab needs: diffs, a visual BOM, the Gerbers as drawn, a 1:1 PDF. One
 command, no GUI, the same picture every time. It is a single Python file that drives
 `kicad-cli` and ImageMagick.
 
@@ -31,9 +32,23 @@ kishot my-board.kicad_pcb
 | **Design rules** | `--drc`: KiCad's DRC runs first; errors and warnings in every header, ringed on the copper layers (errors in magenta, warnings in orange) |
 | **Changes** | `--diff REV`, against the board at an older git revision. The copper, layer by layer: removed in red, added in green, the rest in grey, each change ringed so a short track still shows, with tracks and vias added and removed. The schematic, page by page, the same way, with a close-up of each change. The 3D views before and after, side by side, with what changed ringed. And a GIF that fades from one to the other, so a moved part blinks |
 | **Notes** | `--note "for the review of 23/10"`: a line of your own at the head of every sheet |
-| **Turntable** | `-s spin`: the board, rendered by KiCad, turning once on itself at 20 frames a second, as three animated GIFs: on a light background with its name, transparent without text, and pixelated like a PS2 game; chat apps play them inline |
+| **Turntable** | `-s spin`: the board, rendered by KiCad, turning once on itself at 20 frames a second, as three animated GIFs (on a light background with its name, transparent without text, pixelated like a PS2 game), a transparent WebP with soft edges and its shadow, and an MP4 (two turns, half the size of the one-turn GIF at `--fast`) when ffmpeg is there. `--frames`, `--seconds`, `--tilt`, and `--swing 30` to swing back and forth instead of turning all the way |
+| **X-ray** | `-s xray`: every copper layer at once, each in its KiCad colour and half transparent, pours hidden; from above and from below |
+| **Silkscreen** | `-s silk`: the silkscreen as the fab prints it, cut where the mask opens, the pads in grey: to proofread before ordering |
+| **Assembly** | `-s assembly`: the fabrication layers with their references (values hidden, they would cover them), side by side, to solder from paper |
+| **Visual BOM** | `-s bom`: each fitted part numbered on the board in its group's colour, the list grouped by value and footprint underneath; parts not fitted listed apart |
+| **Dimensions** | `-s dims`: the top view with the outline dimensioned, and each mounting hole's diameter and position from the top-left corner |
+| **Stackup** | `-s stackup`: the layers, thicknesses, materials and εr of the board's physical stackup, dielectrics drawn to scale, the finish |
+| **Gerbers** | `-s gerbers`: the Gerbers and drill file KiCad writes, drawn by gerbv rather than by KiCad and stacked into a board: mask in its stackup colour, exposed copper in its finish, silkscreen, holes |
+| **Print at 1:1** | `-s print`: PDFs at scale 1 (the back one mirrored) of the fabrication layer with the pads sketched, to lay the real parts on paper and check the footprints |
+| **Variants** | `--variant NAME` (KiCad 10): the parts not fitted in that variant are left out of the renders and drawings |
+| **Dark theme** | `--theme dark`: every sheet on a dark background |
+| **Batches** | several boards in one command, or `-r DIR` for every board under a directory (autosaves and backups left out) |
+| **Watch** | `--watch`: the sheets made again each time the board, its schematic or its project is saved; polled every second, so it takes no inotify watch |
+| **Configuration** | a `.kishot.toml` next to the board or above it sets the default sheets, output directory, note, theme… |
+| **Pull requests** | a GitHub Action that comments a pull request with the diff sheets, and updates its comment at each push |
 | **Header** | title, revision, date and company from the title block (the schematic's, when the board's is empty), board size, copper layers, footprints; the file name and KiCad version in the footer |
-| **For scripts** | stdout carries the paths written, one per line, and nothing else; progress and errors go to stderr; the exit status says whether every sheet was made |
+| **For scripts** | stdout carries the paths written, one per line, and nothing else, or with `--json` one object with the paths and the board's figures; progress and errors go to stderr; the exit status says whether every sheet was made |
 | **Opening** | `--open` shows the images once written; under Hyprland, `--workspace N` puts them on another workspace without leaving yours, and replaces an older window of the same image |
 
 ## A look at it
@@ -99,15 +114,61 @@ kishot my-board.kicad_pcb
 
 </details>
 
+### For fabrication
+
+<p align="center">
+  <img src="docs/images/bom.png" alt="kishot's visual BOM: every fitted part of the RoyalBlue54L Feather numbered on the top and bottom views, and the list grouped by value and footprint underneath" width="100%">
+  <br><sub><code>kishot -s bom</code>: each line of the BOM has a number and a colour, found on the board.</sub>
+</p>
+
+<p align="center">
+  <img src="docs/images/gerbers.png" alt="kishot's Gerber sheet: the top and bottom of the board as drawn from the Gerber files, blue solder mask, gold exposed copper, white silkscreen, holes" width="100%">
+  <br><sub><code>kishot -s gerbers</code>: what the fab receives, drawn by gerbv from the files KiCad writes,
+  in the mask colour and finish of the stackup.</sub>
+</p>
+
+<details>
+<summary><b>X-ray, assembly, silkscreen, dimensions, stackup, dark theme</b></summary>
+
+<p align="center">
+  <img src="docs/images/xray.png" alt="kishot's x-ray sheet: the eight copper layers on top of one another in their KiCad colours, half transparent, from above and below, with a legend" width="100%">
+  <br><sub><code>kishot -s xray</code>: every layer at once, to follow a signal from one to the next.</sub>
+</p>
+
+<p align="center">
+  <img src="docs/images/assembly.png" alt="kishot's assembly sheet: the fabrication layers of both sides with their references, pads in grey" width="100%">
+  <br><sub><code>kishot -s assembly</code>: the references on the fabrication layers, values hidden.</sub>
+</p>
+
+<p align="center">
+  <img src="docs/images/silk.png" alt="kishot's silkscreen sheet: the silkscreen of both sides in ink, the pads in grey" width="100%">
+  <br><sub><code>kishot -s silk</code>: the silkscreen as printed, cut where the mask opens.</sub>
+</p>
+
+<p align="center">
+  <img src="docs/images/dims.png" alt="kishot's dimension sheet: the top view with the width and height of the outline, and the four mounting holes with their diameter and position" width="70%">
+  <img src="docs/images/stackup.png" alt="kishot's stackup sheet: the layers of the board from top to bottom, with type, thickness, material and dielectric constant" width="28%">
+  <br><sub><code>kishot -s dims</code> and <code>-s stackup</code>.</sub>
+</p>
+
+<p align="center">
+  <img src="docs/images/layers-dark.png" alt="kishot's copper-layer sheet on a dark background" width="100%">
+  <br><sub><code>kishot --theme dark</code>.</sub>
+</p>
+
+</details>
+
 These sheets were made by `kishot` from the RoyalBlue54L Feather, a demo project that
 ships with KiCad (see [Legal](#legal)), with no option.
 
 ## Install
 
-Requirements: **KiCad 9 or later** (for `kicad-cli pcb render`; tested on 10.0.6 and 10.0.7),
-**ImageMagick 7** (`magick`), Python 3.9 or later. `fc-match` (fontconfig) is used to find DejaVu Sans when it is there.
+Requirements: **KiCad 9 or later** (for `kicad-cli pcb render`; tested on 10.0.6 and 10.0.7;
+`--variant` needs KiCad 10), **ImageMagick 7** (`magick`), Python 3.9 or later (3.11 to read
+`.kishot.toml`). `fc-match` (fontconfig) is used to find DejaVu Sans when it is there.
+Optional: **ffmpeg** for the spin's MP4, **gerbv** for the Gerber sheet, git for `--diff`.
 
-**Nix** (flake; ImageMagick included, and KiCad too if you have none):
+**Nix** (flake; ImageMagick, ffmpeg and gerbv included, and KiCad too if you have none):
 
 ```sh
 nix run github:marc-alexis-com/kishot -- my-board.kicad_pcb
@@ -130,7 +191,7 @@ chmod +x ~/.local/bin/kishot
 ## Usage
 
 ```sh
-kishot                              # every sheet of the only board in this directory
+kishot                              # the 3D and copper sheets of the only board here
 kishot hw/my-board.kicad_pcb        # a given board
 kishot hw/ -s layers                # only the copper layers
 kishot -s 3d --fast                 # quick 3D preview
@@ -141,25 +202,36 @@ kishot --drc --note "rev B review"  # DRC results and a note on every sheet
 kishot --net GND                    # where one net runs
 kishot --diff HEAD~1                # copper, schematic, 3D and fade against the last commit
 kishot --diff v1.0 -s diff          # only the copper, against tag v1.0
-kishot -s spin                      # animated GIFs of the board turning
-kishot --diff v1.0 --net VBUS -s all  # everything the options allow
+kishot -s spin                      # the board turning: GIFs, WebP, MP4
+kishot -s spin --swing 30 --seconds 3   # swinging ±30° instead, in 3 s
+kishot -s bom -s assembly -s print  # what you need to solder it
+kishot -s gerbers -s stackup -s dims    # what the fab will see
+kishot --theme dark                 # on a dark background
+kishot --variant lite               # a KiCad 10 variant: its unfitted parts left out
+kishot -r projects/ --json          # every board under projects/, a JSON report
+kishot --watch --open --workspace 12    # made again at each save, shown on workspace 12
+kishot --diff v1.0 --net VBUS -s all    # everything the options allow
 ```
 
 ```text
-usage: kishot [-h] [-s {3d,layers,net,diff,sch-diff,3d-diff,fade,spin,all}]
-              [-d REV] [-n NAME] [--drc] [--note TEXT] [-o DIR] [-f] [--open]
+usage: kishot [-h] [-r]
+              [-s {3d,layers,xray,silk,assembly,bom,dims,stackup,gerbers,print,net,diff,sch-diff,3d-diff,fade,spin,all}]
+              [-d REV] [-n NAME] [--drc] [--note TEXT] [--variant NAME]
+              [--theme {light,dark}] [-o DIR] [-f] [--json] [--watch]
+              [--frames N] [--seconds S] [--tilt DEG] [--swing DEG] [--open]
               [--workspace N] [--viewer CMD] [-V]
-              [board]
+              [board ...]
 
-Presentation sheets of a KiCad board: 3D views and copper layers.
+Presentation sheets of a KiCad board: 3D views, copper layers, reviews, fabrication.
 
 positional arguments:
   board                 a .kicad_pcb file, or a directory holding exactly one
-                        (default: .)
+                        (default: .); several are made one after the other
 
 options:
   -h, --help            show this help message and exit
-  -s, --sheet {3d,layers,net,diff,sch-diff,3d-diff,fade,spin,all}
+  -r, --recursive       every board under the directories given
+  -s, --sheet {3d,layers,xray,silk,assembly,bom,dims,stackup,gerbers,print,net,diff,sch-diff,3d-diff,fade,spin,all}
                         sheet to make, repeatable (see below)
   -d, --diff REV        compare with the board at this git revision (a commit,
                         tag, branch, HEAD~1...)
@@ -168,8 +240,16 @@ options:
   --drc                 run KiCad's DRC: errors and warnings in every header,
                         ringed on the copper layers
   --note TEXT           a line of your own at the head of every sheet
+  --variant NAME        the board variant to draw (KiCad 10): parts not fitted
+                        in it are left out
+  --theme {light,dark}  light (default) or dark sheets
   -o, --out-dir DIR     where to write the images (created if missing)
   -f, --fast            basic 3D quality and smaller images, for a preview
+  --json                print one JSON object on stdout: the paths written and
+                        the board's figures
+  --watch               make the sheets again each time the board, its
+                        schematic or its project is saved (polled every
+                        second, no inotify)
   --open                open the images once written
   --workspace N         with --open under Hyprland: show them with swayimg on
                         workspace N, without switching to it, replacing an
@@ -178,20 +258,60 @@ options:
                         else xdg-open)
   -V, --version         show program's version number and exit
 
+spin:
+  --frames N            frames of the turn (default 96, 72 with --fast)
+  --seconds S           length of the turn (default 4.8)
+  --tilt DEG            tilt of the board (default -55)
+  --swing DEG           swing ±DEG back and forth instead of turning all the
+                        way round
+
 examples:
 ```
 
 `kishot --help` also lists every sheet and when it is made. The images are
-`<board>-<sheet>.png` (`-3d`, `-layers`, `-diff`, `-sch-diff`, `-3d-diff`),
-`<board>-net-<net>.png`, `<board>-fade.gif`, and for the spin `<board>-spin.gif`,
-`<board>-spin-clear.gif` and `<board>-spin-ps2.gif`. Without `--out-dir`, they go to a
-`fabrication/` or `fab/` directory next to the board if there is one, else next to the board.
-`KISHOT_WORKSPACE` and `KISHOT_VIEWER` set the defaults of the last two options.
+`<board>-<sheet>.png` (`-3d`, `-layers`, `-xray`, `-silk`, `-assembly`, `-bom`, `-dims`,
+`-stackup`, `-gerbers`, `-diff`, `-sch-diff`, `-3d-diff`), `<board>-net-<net>.png`,
+`<board>-fade.gif`; for the spin `<board>-spin.gif`, `-spin-clear.gif`, `-spin-ps2.gif`,
+`-spin-clear.webp` and `-spin.mp4`; for print `<board>-print.pdf`, and `-print-back.pdf` when
+there are parts underneath. Without `--out-dir`, they go to a `fabrication/` or `fab/`
+directory next to the board if there is one, else next to the board. `KISHOT_WORKSPACE` and
+`KISHOT_VIEWER` set the defaults of the last two options.
 
 Timings, on a laptop (Ryzen AI 7 PRO 350, 8 cores) for the 8-layer board above: about 50 s for
-both sheets, 5 s with `--fast`; the spin three to four minutes (96 frames with floor and shadows,
-about 2 GB of memory at its peak, 7 to 9 MB a GIF), 30 s with `--fast` (72 frames, about 2 MB a
-GIF). Nearly all of it is KiCad's ray tracer.
+both default sheets, 5 s with `--fast`; the spin three to four minutes (96 frames with floor and
+shadows, about 2 GB of memory at its peak, 7 to 9 MB a GIF),
+30 s with `--fast` (72 frames, about 2 MB a GIF). Nearly all of it is KiCad's ray tracer. The 2D
+sheets (x-ray, silkscreen, assembly, BOM, dimensions, Gerbers) take 5 to 10 s each, the stackup
+and the PDFs a second or two.
+
+### Configuration
+
+A `.kishot.toml` next to the board, or in a directory above it up to the top of its git
+repository, sets defaults for the options. The command line wins over it, and it over the
+environment. It needs Python 3.11 or later (`tomllib`); older ones say so and ignore it.
+
+```toml
+sheets = ["3d", "layers", "bom"]   # what plain `kishot` makes here
+out_dir = "fab"                    # relative to this file
+note = "rev B"
+theme = "dark"
+drc = true
+workspace = "12"
+swing = 30                         # and frames, seconds, tilt for the spin
+```
+
+An unknown key, or a value of the wrong type, is an error rather than ignored.
+
+### Batches and watching
+
+Several boards can be named; `-r` takes every board under a directory, leaving out KiCad's
+autosaves, `*-backups` directories and hidden ones. A board that fails does not stop the others;
+the exit status is 1 if any did. Two boards with the same name cannot share one `--out-dir`.
+
+`--watch` makes the sheets once, then again each time a watched board, a schematic next to it,
+or its project file changes, until Ctrl+C. It checks the files' dates every second rather than
+asking inotify, whose quota a file synchroniser can use up entirely. With `--open --workspace N`
+the new images replace the old windows; with another viewer, they are opened the first time only.
 
 ## For scripts
 
@@ -199,6 +319,11 @@ GIF). Nearly all of it is KiCad's ray tracer.
 
 - **stdout** is the list of images written, one absolute path per line, printed as each sheet
   is done. Nothing else is ever printed there.
+- **`--json`** prints one JSON object instead, once everything is done (one per run with
+  `--watch`): `{"kishot": version, "ok": bool, "boards": [...]}`, each board with its path,
+  `ok`, `error`, the paths written per sheet, and its figures: title block, size, thickness,
+  each copper layer's tracks, length and planes, vias, narrowest track, net classes,
+  footprints, parts fitted, DRC counts.
 - **stderr** carries progress (`kishot: 3d sheet of board.kicad_pcb…`) and errors, one line
   each, without a traceback.
 - **Exit status**: `0` when every sheet asked for was written, `1` on any failure (no board,
@@ -207,7 +332,36 @@ GIF). Nearly all of it is KiCad's ray tracer.
 
 ```sh
 kishot -s layers --fast | while read -r png; do upload "$png"; done
+kishot -r hw/ --json -s stackup | jq '.boards[].figures | {title, thickness_mm, vias}'
 ```
+
+## GitHub Action
+
+The repository is also an Action: on a pull request, it draws the diff sheets of a board
+against the pull request's base, pushes the images to a branch of their own (a comment can only
+show an image that has a URL) and writes one comment, updated in place at each push.
+
+```yaml
+on: pull_request
+permissions:
+  contents: write        # to push the images to the kishot-images branch
+  pull-requests: write   # to comment
+jobs:
+  board:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: marc-alexis-com/kishot@v0.5.0
+        with:
+          board: hw/                         # default: the repository's top
+          sheets: diff sch-diff 3d-diff      # the default
+          args: --fast --drc                 # default: --fast
+```
+
+It installs Nix and runs kishot from this repository's flake, KiCad included: the first run
+downloads KiCad, a few minutes. Pull requests from forks get a read-only token, so the push
+and the comment fail there. The JSON report is the step's `report` output.
+
 
 ## How it works
 
@@ -242,6 +396,38 @@ flicker. Three GIFs come out of the same renders:
   shadow on the floor is left out and the edges are not smoothed against your background;
 - `-spin-ps2.gif`, drawn at a third of the size on the gradient of KiCad's 3D viewer, its colours
   cut to 15 bits with an ordered dither, as the PS2 did, then enlarged by whole pixels.
+
+Two more files come out of the spin: `-spin-clear.webp`, which keeps a real alpha channel (soft
+edges, the shadow on the floor), and with ffmpeg `-spin.mp4`, H.264 for any player, two turns
+long since a chat app shows a video once before looping it. `--swing DEG` replaces the turn by a
+pendulum, `DEG × sin(2π t)`, which ends where it began and so loops without a jump.
+
+**2D sheets.** The x-ray, silkscreen, assembly, BOM and dimension sheets all draw each layer they
+need in black and white with `kicad-cli pcb export svg`, framed on the outline in millimetres as
+the copper sheet is, then paint each in its colour over the background. Silkscreen, assembly,
+BOM and dimensions start from a copy of the board without tracks, vias or zones, so only the
+pads are left to find one's way; the assembly copy also hides every footprint's value, which
+KiCad writes on the fabrication layer over the reference. Numbers, rings, arrows and labels are
+an SVG in the board's own millimetres, drawn over the picture. The BOM groups fitted parts by
+value and footprint (`exclude_from_bom` and references starting with `#` left out, `dnp` listed
+apart). The dimensions give the outline's bounding box, and the holes of mounting-hole
+footprints and unplated holes of 2 mm or more, placed from the top-left corner with KiCad's
+y downwards.
+
+**Stackup.** Read from the board's `(setup (stackup …))`, as Board Setup writes it: each layer's
+type, thickness, material, εr and colour, and the copper finish. Dielectrics are drawn to scale,
+the thin layers one line of text high.
+
+**Gerbers.** `kicad-cli pcb export gerbers` and `export drill` write what a fab would get; gerbv
+draws each file in black and white on the same window, in the board's coordinates (Gerber's y
+points up). The board is what the outline encloses, found by flooding the outside from a
+corner; then, pixel by pixel: a hole or outside the board, background; silkscreen; copper where
+the mask opens, in the finish's colour (gold for ENIG); a mask opening without copper, bare FR4;
+copper under the mask, a lighter mask; else the mask, in its stackup colour (green by default).
+
+**Print.** `kicad-cli pcb export pdf` at scale 1 on the board's page, the fabrication and
+courtyard layers with the pads sketched and the outline, in black and white; the back one
+mirrored, as the parts are seen from below.
 
 **Design rules.** `--drc` runs `kicad-cli pcb drc` on the board with the project's own rules,
 errors and warnings (exclusions left out). Each violation's first item gives a position, and its
@@ -280,6 +466,13 @@ regular expressions over the whole file, so the formatting of the file does not 
 
 | Symptom | Likely cause |
 |---|---|
+| `the gerbers sheet needs gerbv` | gerbv is not installed. With `-s all` the sheet is left out instead. |
+| `kicad-cli … unknown argument --variant` | Variants arrived in KiCad 10. |
+| `.kishot.toml ignored: reading it needs Python 3.11` | `tomllib` is in the standard library from 3.11. |
+| `no ffmpeg: no MP4 of the spin` | The GIFs and the WebP are made anyway. |
+| The BOM numbers sit on top of one another | A dense board at `--fast`: without it the views are twice as large. |
+| A mounting hole is missing on the dimension sheet | Only holes of mounting-hole footprints, and unplated holes of 2 mm or more, are dimensioned; a connector's pegs are not. |
+| Printed, the PDF is not to scale | The print dialog shrank it to fit the page: print at 100 % ("actual size"). |
 | The board comes out orange (bare copper) in 3D | The solder mask is hidden in the PCB editor's 3D viewer settings: `kishot` uses that preset (`follow_pcb_editor`). |
 | A part is missing in 3D (a bare footprint, a hole) | The footprint has no 3D model, or KiCad cannot find it: check `KICAD9_3DMODEL_DIR` / `KICAD10_3DMODEL_DIR`. `kishot` renders what KiCad renders. |
 | `view … still touches the frame` | Something very large sticks out of the board. The sheet is still made; that view is cut. |

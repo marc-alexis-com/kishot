@@ -251,9 +251,11 @@ class Sheets(unittest.TestCase):
         self.assertEqual(self.pick("--diff", "HEAD", "-s", "fade"), ["fade"])
 
     def test_all(self):
-        self.assertEqual(self.pick("-s", "all"), ["3d", "layers", "spin"])
+        self.assertEqual(self.pick("-s", "all"), ["3d", "layers", "xray", "silk", "assembly", "bom", "dims",
+                                                  "stackup", "gerbers", "print", "spin"])
         self.assertEqual(self.pick("-s", "all", "--net", "GND", "--diff", "HEAD"),
-                         ["3d", "layers", "net", "diff", "sch-diff", "3d-diff", "fade", "spin"])
+                         list(kishot.SHEETS))
+        self.assertNotIn("gerbers", kishot.choose_sheets(kishot.parse_args(["-s", "all"]), gerbv=False))
 
     def test_missing_option(self):
         self.assertIn("--diff", self.pick("-s", "3d-diff"))
@@ -295,6 +297,151 @@ class CommandLine(unittest.TestCase):
         self.assertEqual(kishot.parse_args(["-s", "layers"]).sheet, ["layers"])
         with self.assertRaises(SystemExit):
             kishot.parse_args(["-s", "photo"])
+
+
+PARTS = """(kicad_pcb
+\t(setup
+\t\t(stackup
+\t\t\t(layer "F.SilkS" (type "Top Silk Screen") (color "White"))
+\t\t\t(layer "F.Mask" (type "Top Solder Mask") (color "Blue") (thickness 0.01))
+\t\t\t(layer "F.Cu" (type "copper") (thickness 0.035))
+\t\t\t(layer "dielectric 1" (type "core") (thickness 1.51 locked) (material "FR4") (epsilon_r 4.5))
+\t\t\t(layer "B.Cu" (type "copper") (thickness 0.035))
+\t\t\t(copper_finish "ENIG")
+\t\t)
+\t)
+\t(footprint "Resistor_SMD:R_0603"
+\t\t(layer "F.Cu")
+\t\t(at 20 30 90)
+\t\t(property "Reference" "R2" (at 0 -1 90) (layer "F.SilkS"))
+\t\t(property "Value" "10k" (at 0 1 90) (layer "F.Fab"))
+\t\t(attr smd)
+\t)
+\t(footprint "Resistor_SMD:R_0603"
+\t\t(layer "B.Cu")
+\t\t(at 25 30)
+\t\t(property "Reference" "R1" (at 0 -1 0) (layer "B.SilkS"))
+\t\t(property "Value" "10k" (at 0 1 0) (layer "B.Fab") (hide yes))
+\t\t(attr smd)
+\t)
+\t(footprint "Resistor_SMD:R_0603"
+\t\t(layer "F.Cu")
+\t\t(at 30 30)
+\t\t(property "Reference" "R3" (at 0 -1 0) (layer "F.SilkS"))
+\t\t(property "Value" "10k" (at 0 1 0) (layer "F.Fab"))
+\t\t(attr smd dnp)
+\t)
+\t(footprint "Logo:Logo"
+\t\t(layer "F.Cu")
+\t\t(at 40 40)
+\t\t(property "Reference" "#G1" (at 0 0 0) (layer "F.SilkS"))
+\t\t(attr exclude_from_bom)
+\t)
+\t(footprint "MountingHole:MountingHole_3.2mm"
+\t\t(layer "F.Cu")
+\t\t(at 50 45 90)
+\t\t(property "Reference" "H1" (at 0 0 0) (layer "F.SilkS"))
+\t\t(pad "" np_thru_hole circle (at 1 0) (size 3.2 3.2) (drill 3.2) (layers "*.Cu" "*.Mask"))
+\t\t(attr exclude_from_pos_files exclude_from_bom)
+\t)
+\t(footprint "Connector:USB_C"
+\t\t(layer "F.Cu")
+\t\t(at 12 25)
+\t\t(property "Reference" "J1" (at 0 0 0) (layer "F.SilkS"))
+\t\t(property "Value" "USB_C" (at 0 0 0) (layer "F.Fab"))
+\t\t(pad "" np_thru_hole circle (at 0 0) (size 0.65 0.65) (drill 0.65) (layers "*.Cu" "*.Mask"))
+\t\t(attr smd)
+\t)
+)
+"""
+
+
+class Parts(unittest.TestCase):
+    def setUp(self):
+        self.board = {"text": PARTS, "items": kishot.top_level_items(PARTS)}
+        self.parts = kishot.footprints(self.board["items"])
+
+    def test_footprints(self):
+        r2 = self.parts[0]
+        self.assertEqual((r2["ref"], r2["value"], r2["footprint"], r2["x"], r2["y"], r2["rot"], r2["side"]),
+                         ("R2", "10k", "R_0603", 20.0, 30.0, 90.0, "top"))
+        self.assertEqual(self.parts[1]["side"], "bottom")
+        self.assertTrue(self.parts[2]["dnp"])
+        self.assertFalse(self.parts[3]["bom"])
+
+    def test_bom_groups(self):
+        fitted, dnp = kishot.bom_groups(self.parts)
+        self.assertEqual([(v, fp, [f["ref"] for f in fs]) for v, fp, fs in fitted],
+                         [("USB_C", "USB_C", ["J1"]), ("10k", "R_0603", ["R2", "R1"])])
+        self.assertEqual([[f["ref"] for f in fs] for _, _, fs in dnp], [["R3"]])
+
+    def test_ref_ranges(self):
+        self.assertEqual(kishot.ref_ranges(["R3", "R1", "R2", "R7", "R10", "C1"]), "C1, R1–R3, R7, R10")
+        self.assertEqual(kishot.ref_ranges(["R1", "R2"]), "R1, R2")
+        self.assertEqual(kishot.ref_ranges(["J1", "SW_A"]), "J1, SW_A")
+
+    def test_mounting_holes(self):
+        # The hole is at (1, 0) in a footprint turned by 90°: KiCad's y points down.
+        (x, y, d), = kishot.mounting_holes(self.board)
+        self.assertAlmostEqual(x, 50.0, places=6)
+        self.assertAlmostEqual(y, 44.0, places=6)
+        self.assertEqual(d, 3.2)
+
+    def test_hide_values(self):
+        out = kishot.hide_values(PARTS)
+        self.assertEqual(out.count("(hide yes)"), 4)
+        self.assertEqual(out.count("("), out.count(")"))
+
+    def test_stackup(self):
+        layers, finish = kishot.stackup(self.board)
+        self.assertEqual(finish, "ENIG")
+        self.assertEqual([x["name"] for x in layers], ["F.SilkS", "F.Mask", "F.Cu", "dielectric 1", "B.Cu"])
+        self.assertEqual(layers[3]["thickness"], 1.51)
+        self.assertEqual(layers[3]["material"], "FR4")
+        self.assertAlmostEqual(kishot.stackup_thickness(self.board), 1.59)
+        self.assertEqual(kishot.layer_fill(layers[1]), kishot.NAMED_COLOURS["blue"])
+
+
+class Spin(unittest.TestCase):
+    def test_turn_and_swing(self):
+        self.assertEqual(kishot.spin_angle(24, 96, 0), 90)
+        self.assertAlmostEqual(kishot.spin_angle(24, 96, 30), 30)
+        self.assertAlmostEqual(kishot.spin_angle(72, 96, 30), -30)
+
+
+class Config(unittest.TestCase):
+    def test_find_and_load(self):
+        if sys.version_info < (3, 11):
+            self.skipTest("tomllib")
+        with tempfile.TemporaryDirectory() as t:
+            top = Path(t)
+            (top / ".git").mkdir()
+            (top / "hw").mkdir()
+            pcb = top / "hw" / "a.kicad_pcb"
+            self.assertIsNone(kishot.find_config(pcb))
+            (top / ".kishot.toml").write_text('sheets = "bom"\nout_dir = "fab"\nworkspace = 12\nseconds = 3\n')
+            cfg = kishot.load_config(kishot.find_config(pcb))
+            self.assertEqual(cfg, {"config_sheets": ["bom"], "out_dir": (top / "fab").resolve(),
+                                   "workspace": "12", "seconds": 3.0})
+            a = kishot.parse_args([], cfg)
+            self.assertEqual(kishot.choose_sheets(a), ["bom"])
+            self.assertEqual(kishot.choose_sheets(kishot.parse_args(["-s", "3d"], cfg)), ["3d"])
+            (top / ".kishot.toml").write_text("drc = 1\n")
+            with self.assertRaisesRegex(kishot.Failure, "drc should be a bool"):
+                kishot.load_config(top / ".kishot.toml")
+
+
+class Batches(unittest.TestCase):
+    def test_recursive(self):
+        with tempfile.TemporaryDirectory() as t:
+            d = Path(t)
+            for f in ("a/x.kicad_pcb", "b/y.kicad_pcb", "b/y-backups/y.kicad_pcb", ".h/z.kicad_pcb",
+                      "a/_autosave-x.kicad_pcb"):
+                (d / f).parent.mkdir(parents=True, exist_ok=True)
+                (d / f).write_text(BOARD)
+            self.assertEqual([p.name for p in kishot.find_boards([d], True)], ["x.kicad_pcb", "y.kicad_pcb"])
+            with self.assertRaisesRegex(kishot.Failure, "no .kicad_pcb"):
+                kishot.find_boards([d], False)
 
 
 if __name__ == "__main__":

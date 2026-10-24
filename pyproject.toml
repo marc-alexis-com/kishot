@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "kishot"
 dynamic = ["version"]
-description = "Presentation sheets of a KiCad board: 3D views and copper layers"
+description = "Presentation sheets of a KiCad board: 3D views, copper layers, diffs, BOM, Gerbers"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.9"

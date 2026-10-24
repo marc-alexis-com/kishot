@@ -1,0 +1,24 @@
+name: Release
+
+# A tag v* builds the package and publishes it on PyPI by trusted publishing: no token is
+# stored here, PyPI trusts this workflow of this repository (see packaging/README.md).
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  pypi:
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: The tag matches the version
+        run: test "v$(python -c 'import kishot; print(kishot.__version__)')" = "$GITHUB_REF_NAME"
+      - run: python -m unittest discover -s tests
+      - run: pipx run build
+      - uses: pypa/gh-action-pypi-publish@release/v1
