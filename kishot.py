@@ -422,12 +422,27 @@ def sheet(tiles, columns, header, out, style, work, below=None):
              "-append", "+repage", str(grid)], "adding to the grid")
     title, details, footer = header
     m = style.px(40)
+    # Details that do not fit the sheet's width go on more lines (DejaVu Sans: about 0.55 em
+    # a character).
+    per_line = max(20, int((width - 2 * m) / (0.55 * style.px(30))))
+    lines, line = [], ""
+    for d in details:
+        joined = f"{line}   ·   {d}" if line else d
+        if line and len(joined) > per_line:
+            lines.append(line)
+            line = d
+        else:
+            line = joined
+    lines.append(line)
+    step = style.px(44)
+    text = []
+    for k, ln in enumerate(lines):
+        text += ["-annotate", f"+{m}+{style.px(122) + k * step}", ln]
     run(["magick",
-         "(", "-size", f"{width}x{style.px(190)}", f"xc:{PAGE}", "-gravity", "northwest",
+         "(", "-size", f"{width}x{style.px(190) + (len(lines) - 1) * step}", f"xc:{PAGE}", "-gravity", "northwest",
          "-font", style.bold, "-pointsize", str(style.px(58)), "-fill", INK,
          "-annotate", f"+{m}+{style.px(36)}", title,
-         "-font", style.regular, "-pointsize", str(style.px(30)), "-fill", GREY,
-         "-annotate", f"+{m}+{style.px(122)}", "   ·   ".join(details), ")",
+         "-font", style.regular, "-pointsize", str(style.px(30)), "-fill", GREY, *text, ")",
          str(grid),
          "(", "-size", f"{width}x{style.px(60)}", f"xc:{PAGE}",
          "-font", style.regular, "-pointsize", str(style.px(22)), "-fill", GREY,
@@ -562,7 +577,7 @@ def spin_angle(i, n, swing):
 def make_spin(pcb, board, out, fast, work, opts=None):
     """Animated GIFs from one turn rendered by KiCad: on a light background with the board's
     name, transparent without text, and pixelated in the manner of a PS2 game; a transparent
-    WebP with soft edges and its shadow, and an MP4 when ffmpeg is there."""
+    WebP with soft edges, and an MP4 when ffmpeg is there."""
     opts = opts or {}
     n = opts.get("frames") or (72 if fast else 96)  # 14 and 20 frames a second
     seconds = opts.get("seconds") or SPIN_SECONDS
@@ -623,7 +638,7 @@ def make_spin(pcb, board, out, fast, work, opts=None):
              "-font", style.regular, "-pointsize", str(style.px(30)), "-fill", GREY,
              "-gravity", "center", "-annotate", "+0+0", caption, ")",
              "-append", "-flatten", "+repage", str(plain)], f"framing frame {i + 1}")
-        # GIF transparency is all or nothing: the shadow on the floor goes, the board stays.
+        # GIF transparency is all or nothing: the edges are cut hard at half opacity.
         run(["magick", str(png), "-background", "none", *crop, "-resize", f"{w}x{h}",
              "-gravity", "center", "-extent", f"{w}x{h}",
              "-channel", "A", "-threshold", "50%", "+channel", "+repage", str(clear)],
@@ -642,7 +657,7 @@ def make_spin(pcb, board, out, fast, work, opts=None):
     made = [gif([d[0] for d in done], out, delay),
             gif([d[1] for d in done], out.with_name(f"{out.stem}-clear.gif"), delay, transparent=True),
             gif([d[2] for d in done], out.with_name(f"{out.stem}-ps2.gif"), delay)]
-    # WebP keeps a real alpha channel: smooth edges and the shadow on the floor.
+    # WebP keeps a real alpha channel, so the edges stay smooth on any background.
     webp = out.with_name(f"{out.stem}-clear.webp")
     run(["magick", "-delay", str(delay), "-dispose", "Background", *(str(d[3]) for d in done),
          "-loop", "0", "-define", "webp:alpha-quality=90", "-quality", "85", str(webp)],

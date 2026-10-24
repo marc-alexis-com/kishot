@@ -32,7 +32,7 @@ kishot my-board.kicad_pcb
 | **Design rules** | `--drc`: KiCad's DRC runs first; errors and warnings in every header, ringed on the copper layers (errors in magenta, warnings in orange) |
 | **Changes** | `--diff REV`, against the board at an older git revision. The copper, layer by layer: removed in red, added in green, the rest in grey, each change ringed so a short track still shows, with tracks and vias added and removed. The schematic, page by page, the same way, with a close-up of each change. The 3D views before and after, side by side, with what changed ringed. And a GIF that fades from one to the other, so a moved part blinks |
 | **Notes** | `--note "for the review of 23/10"`: a line of your own at the head of every sheet |
-| **Turntable** | `-s spin`: the board, rendered by KiCad, turning once on itself at 20 frames a second, as three animated GIFs (on a light background with its name, transparent without text, pixelated like a PS2 game), a transparent WebP with soft edges and its shadow, and an MP4 (two turns, half the size of the one-turn GIF at `--fast`) when ffmpeg is there. `--frames`, `--seconds`, `--tilt`, and `--swing 30` to swing back and forth instead of turning all the way |
+| **Turntable** | `-s spin`: the board, rendered by KiCad, turning once on itself at 20 frames a second, as three animated GIFs (on a light background with its name, transparent without text, pixelated like a PS2 game), a transparent WebP with soft edges, and an MP4 (two turns, yet a third the size of the one-turn GIF) when ffmpeg is there. `--frames`, `--seconds`, `--tilt`, and `--swing 30` to swing back and forth instead of turning all the way |
 | **X-ray** | `-s xray`: every copper layer at once, each in its KiCad colour and half transparent, pours hidden; from above and from below |
 | **Silkscreen** | `-s silk`: the silkscreen as the fab prints it, cut where the mask opens, the pads in grey: to proofread before ordering |
 | **Assembly** | `-s assembly`: the fabrication layers with their references (values hidden, they would cover them), side by side, to solder from paper |
@@ -279,7 +279,8 @@ directory next to the board if there is one, else next to the board. `KISHOT_WOR
 
 Timings, on a laptop (Ryzen AI 7 PRO 350, 8 cores) for the 8-layer board above: about 50 s for
 both default sheets, 5 s with `--fast`; the spin three to four minutes (96 frames with floor and
-shadows, about 2 GB of memory at its peak, 7 to 9 MB a GIF),
+shadows, about 2 GB of memory at its peak, 7 to 9 MB a GIF, 3 MB for the two-turn MP4, 5 MB for
+the WebP),
 30 s with `--fast` (72 frames, about 2 MB a GIF). Nearly all of it is KiCad's ray tracer. The 2D
 sheets (x-ray, silkscreen, assembly, BOM, dimensions, Gerbers) take 5 to 10 s each, the stackup
 and the PDFs a second or two.
@@ -352,15 +353,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - uses: marc-alexis-com/kishot@v0.5.0
+      - uses: marc-alexis-com/kishot@main    # or a release tag, once there is one
         with:
           board: hw/                         # default: the repository's top
           sheets: diff sch-diff 3d-diff      # the default
           args: --fast --drc                 # default: --fast
 ```
 
-It installs Nix and runs kishot from this repository's flake, KiCad included: the first run
-downloads KiCad, a few minutes. Pull requests from forks get a read-only token, so the push
+It installs Nix and runs kishot from this repository's flake, KiCad included: about two and a
+half minutes a run on GitHub's runners, most of it downloading KiCad. Pull requests from forks get a read-only token, so the push
 and the comment fail there. The JSON report is the step's `report` output.
 
 
@@ -394,12 +395,13 @@ flicker. Three GIFs come out of the same renders:
 
 - `-spin.gif`, on a light background, the board's name underneath;
 - `-spin-clear.gif`, transparent and without text. GIF transparency is all or nothing, so the
-  shadow on the floor is left out and the edges are not smoothed against your background;
+  edges are not smoothed against your background;
 - `-spin-ps2.gif`, drawn at a third of the size on the gradient of KiCad's 3D viewer, its colours
   cut to 15 bits with an ordered dither, as the PS2 did, then enlarged by whole pixels.
 
-Two more files come out of the spin: `-spin-clear.webp`, which keeps a real alpha channel (soft
-edges, the shadow on the floor), and with ffmpeg `-spin.mp4`, H.264 for any player, two turns
+Two more files come out of the spin: `-spin-clear.webp`, which keeps a real alpha channel, so its
+edges stay smooth on any background (KiCad draws no floor shadow on a transparent
+background, only a faint halo of a few pixels), and with ffmpeg `-spin.mp4`, H.264 for any player, two turns
 long since a chat app shows a video once before looping it. `--swing DEG` replaces the turn by a
 pendulum, `DEG × sin(2π t)`, which ends where it began and so loops without a jump.
 

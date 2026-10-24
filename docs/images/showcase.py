@@ -248,7 +248,7 @@ def slide(spec, out):
     backdrop = spec.get("backdrop")
     result = []
     if len(frames) > 1:  # an animation: played in place, on its focus when it has one
-        step = max(1, len(frames) // 36)  # long animations are thinned for the tour
+        step = max(1, len(frames) // 24)  # long animations are thinned for the tour
         for img, ms in frames[::step]:
             if target:
                 img = img.crop(target)
@@ -285,7 +285,7 @@ def slides(stem):
              caption="every copper layer, pours hidden: tracks, lengths, plane nets"),
         dict(command="kishot --drc", file=f"{stem}-layers.png", focus=["#d000d0"], frac=0.2,
              caption="KiCad's DRC: counts in the header, each violation ringed where it is"),
-        dict(command="kishot -s xray", file=f"{stem}-xray.png",
+        dict(command="kishot -s xray", file=f"{stem}-xray.png", focus=["#c83434", "#4d7fc4"], frac=0.3,
              caption="every copper layer at once, each in its colour, from above and below"),
         dict(command="kishot --theme dark", file=f"dark/{stem}-layers.png",
              caption="every sheet on a dark background"),
@@ -299,13 +299,13 @@ def slides(stem):
              caption="3D before and after, what moved ringed in red"),
         dict(command="kishot --diff HEAD~1", file=f"{stem}-fade.gif", focus="motion", frac=0.35,
              caption="and a GIF that fades from one version to the other: the switch moved"),
-        dict(command="kishot -s bom", file=f"{stem}-bom.png",
+        dict(command="kishot -s bom", file=f"{stem}-bom.png", focus=kishot.BOM_COLOURS[:6], frac=0.3,
              caption="each part numbered on the board, the list grouped by value"),
         dict(command="kishot -s assembly", file=f"{stem}-assembly.png",
              caption="the references on the fabrication layers, to solder from paper"),
         dict(command="kishot -s silk", file=f"{stem}-silk.png",
              caption="the silkscreen as the fab prints it, to proofread before ordering"),
-        dict(command="kishot -s gerbers", file=f"{stem}-gerbers.png",
+        dict(command="kishot -s gerbers", file=f"{stem}-gerbers.png", focus=["#d9b04c"], frac=0.3,
              caption="the Gerbers as the fab gets them, drawn by gerbv: mask, finish, silk, holes"),
         dict(command="kishot -s dims", file=f"{stem}-dims.png",
              caption="the outline dimensioned, the mounting holes placed"),
@@ -317,8 +317,8 @@ def slides(stem):
              caption="the same turn, transparent, for any background"),
         dict(command="kishot -s spin", file=f"{stem}-spin-ps2.gif",
              caption="pixelated like a PS2 game"),
-        dict(command="kishot -s spin --swing 30", file=f"{stem}-spin-clear.webp", backdrop="checker",
-             caption="and a WebP with soft edges and its shadow; an MP4 too, with ffmpeg"),
+        dict(command="kishot -s spin", file=f"{stem}-spin-clear.webp", backdrop="checker",
+             caption="and a WebP with soft edges for any background; an MP4 too, with ffmpeg"),
     ]
 
 

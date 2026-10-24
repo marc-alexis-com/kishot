@@ -10,19 +10,25 @@
   drawn by gerbv and stacked into a board, in the stackup's mask colour and finish) and `print`
   (PDFs at 1:1, the back one mirrored, to lay the real parts on). All in `-s all`; `gerbers`
   only when gerbv is there, `stackup` only when the board has one.
-- **Spin**: a transparent WebP with soft edges and the shadow, and an MP4 (two turns) when
+- **Spin**: a transparent WebP with soft edges, and an MP4 (two turns) when
   ffmpeg is there. `--frames`, `--seconds`, `--tilt`, and `--swing DEG` for a pendulum.
 - **`--theme dark`**, for every sheet.
-- **`--variant NAME`** (KiCad 10), passed to every render and export.
+- **`--variant NAME`** (KiCad 10), passed to every render and export; the BOM follows the
+  variant's own `dnp` and `exclude_from_bom`. An unknown name is an error listing the board's
+  variants: kicad-cli would silently draw the default one.
 - **Several boards** in one command, **`-r`** for every board under a directory; a failing
   board does not stop the others.
-- **`--json`**: one object on stdout, the paths written and the board's figures.
+- **`--json`**: one object on stdout, the paths written and the board's figures; an `error`
+  when kishot fails before any board.
 - **`--watch`**: the sheets made again at each save, by polling, without inotify.
 - **`.kishot.toml`**: defaults for the options, found next to the board or above it.
-- **GitHub Action** (`action.yml`): the diff sheets in a pull request comment, updated in place.
+- **GitHub Action** (`action.yml`): the diff sheets in a pull request comment, updated in place;
+  tested on a private pull request, about two and a half minutes a run.
 - Packaging recipes for PyPI (`release.yml`, trusted publishing), the AUR and nixpkgs, in
   `packaging/`; nothing is published yet.
-- The Nix package brings ffmpeg and gerbv.
+- The Nix package brings ffmpeg and gerbv, and reads its version line by line: a regex over the
+  whole file overflowed the stack of Nix 2.35.4 on GitHub's runners.
+- The README's pictures and links are absolute, so that PyPI shows them.
 - DRC errors are ringed in magenta, not red: on F.Cu, red rings disappeared in the copper.
 - README: a tour (`tour.gif`, one slide per feature, the command above its output) and an
   overview (`features.png`), built by `docs/images/showcase.py` from KiCad's RoyalBlue54L demo
