@@ -5,8 +5,11 @@
 # the machine wins, and its own 3D models and colours are used.
 stdenvNoCC.mkDerivation {
   pname = "kishot";
-  version = builtins.head
-    (builtins.match ''.*__version__ = "([^"]+)".*'' (builtins.readFile ./kishot.py));
+  # Matched on its own line: a `.*` over the whole file overflows Nix's regex stack once
+  # kishot.py passes about 100 kB, on some builds of Nix.
+  version = builtins.head (builtins.match ''__version__ = "([^"]+)"''
+    (lib.findFirst (l: lib.hasPrefix "__version__ = " l) ""
+      (lib.splitString "\n" (builtins.readFile ./kishot.py))));
   src = lib.cleanSource ./.;
   nativeBuildInputs = [ makeWrapper ];
   installPhase = ''

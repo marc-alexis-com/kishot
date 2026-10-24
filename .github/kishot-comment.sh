@@ -30,23 +30,25 @@ nix run "path:$KISHOT_ACTION" -- "$BOARD" --diff "$base" "${wanted[@]}" "${extra
 
 # The images live on a branch of their own: a comment can only show what has a URL.
 dir="pr-$PR/${HEAD_SHA:0:12}"
-work=$(mktemp -d)
-git -C "$work" init -q
-git -C "$work" remote add origin "https://x-access-token:$GH_TOKEN@github.com/$GITHUB_REPOSITORY.git"
-if git -C "$work" fetch -q --depth 1 origin "$BRANCH" 2>/dev/null; then
-  git -C "$work" checkout -q -b "$BRANCH" FETCH_HEAD
-else
-  git -C "$work" checkout -q --orphan "$BRANCH"
-fi
-mkdir -p "$work/$dir"
 if compgen -G "$out/sheets/*" > /dev/null; then
+  work=$(mktemp -d)
+  git -C "$work" init -q
+  git -C "$work" remote add origin "https://x-access-token:$GH_TOKEN@github.com/$GITHUB_REPOSITORY.git"
+  if git -C "$work" fetch -q --depth 1 origin "$BRANCH" 2>/dev/null; then
+    git -C "$work" checkout -q -b "$BRANCH" FETCH_HEAD
+  else
+    git -C "$work" checkout -q --orphan "$BRANCH"
+  fi
+  mkdir -p "$work/$dir"
   cp "$out"/sheets/* "$work/$dir/"
+  git -C "$work" add -A
+  if ! git -C "$work" diff --cached --quiet; then
+    git -C "$work" -c user.name="github-actions[bot]" \
+      -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+      commit -q -m "kishot: pull request #$PR at ${HEAD_SHA:0:12}"
+    git -C "$work" push -q origin "HEAD:$BRANCH"
+  fi
 fi
-git -C "$work" add -A
-git -C "$work" -c user.name="github-actions[bot]" \
-  -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
-  commit -q -m "kishot: pull request #$PR at ${HEAD_SHA:0:12}" || true
-git -C "$work" push -q origin "HEAD:$BRANCH"
 
 body=$(python3 - "$out/report.json" "$GITHUB_REPOSITORY" "$BRANCH" "$dir" "$base" <<'EOF'
 import json, sys, urllib.parse
