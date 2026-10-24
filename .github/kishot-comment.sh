@@ -70,7 +70,9 @@ for b in data["boards"]:
             url = f"https://github.com/{repo}/blob/{branch}/{folder}/{urllib.parse.quote(name)}?raw=true"
             lines.append(f"<details open><summary>{sheet}</summary>\n\n![{name}]({url})\n</details>")
     lines.append("")
-if not data["boards"]:
+if data.get("error"):
+    lines.append(f"> kishot failed: {data['error']}")
+elif not data["boards"]:
     lines.append("> kishot wrote no report: see the job's log.")
 print("\n".join(lines))
 EOF

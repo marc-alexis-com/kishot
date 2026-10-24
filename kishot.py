@@ -69,6 +69,7 @@ set_theme("light")
 
 # Extra options for every kicad-cli call that draws the board: --variant (KiCad 10).
 KICAD_OPTS = []
+VARIANT = None  # the variant asked for, which the BOM follows too
 
 # A pour whose outline covers this share of the board is called a plane.
 PLANE_SHARE = 0.3
@@ -873,6 +874,30 @@ def svg_png(body, size, png):
     return png
 
 
+def variant_blocks(text):
+    """A footprint without its `(variant ...)` blocks (KiCad 10), and those blocks by
+    variant name, in lower case: KiCad compares variant names without case."""
+    out, blocks, pos = [], {}, 0
+    for m in re.finditer(r"\(variant\b", text):
+        if m.start() < pos:
+            continue
+        end = closing_paren(text, m.start()) + 1
+        block = text[m.start():end]
+        name = re.search(r'\(name "((?:[^"\\]|\\.)*)"\)', block)
+        if name:
+            blocks[name.group(1).casefold()] = block
+        out.append(text[pos:m.start()])
+        pos = end
+    out.append(text[pos:])
+    return "".join(out), blocks
+
+
+def board_variants(items):
+    """The variants a KiCad 10 board defines, by name."""
+    block = next((t for h, t in items if h == "variants"), "")
+    return re.findall(r'\(variant\s+\(name "((?:[^"\\]|\\.)*)"\)', block)
+
+
 def footprints(items):
     """Every footprint: reference, value, footprint name, position, side, and whether it
     belongs in the BOM and is fitted."""
@@ -887,8 +912,17 @@ def footprints(items):
                or re.search(r'\(fp_text reference "((?:[^"\\]|\\.)*)"', t))
         value = (re.search(r'\(property "Value" "((?:[^"\\]|\\.)*)"', t)
                  or re.search(r'\(fp_text value "((?:[^"\\]|\\.)*)"', t))
-        attr = re.search(r"\(attr ([^()]*)\)", t)
+        base, overrides = variant_blocks(t)
+        attr = re.search(r"\(attr ([^()]*)\)", base)
         attrs = attr.group(1).split() if attr else []
+        dnp = "dnp" in attrs or "(dnp yes)" in base
+        excluded = "exclude_from_bom" in attrs
+        mine = overrides.get(VARIANT.casefold()) if VARIANT else None
+        if mine:
+            flag = re.search(r"\(dnp (yes|no)\)", mine)
+            dnp = flag.group(1) == "yes" if flag else dnp
+            flag = re.search(r"\(exclude_from_bom (yes|no)\)", mine)
+            excluded = flag.group(1) == "yes" if flag else excluded
         r = ref.group(1) if ref else "?"
         out.append({
             "ref": r, "value": value.group(1) if value else "",
@@ -896,8 +930,8 @@ def footprints(items):
             "x": float(at.group(1)) if at else 0.0, "y": float(at.group(2)) if at else 0.0,
             "rot": float(at.group(3) or 0) if at else 0.0,
             "side": "bottom" if layer and layer.group(1) == "B.Cu" else "top",
-            "bom": "exclude_from_bom" not in attrs and not r.startswith("#"),
-            "dnp": "dnp" in attrs or "(dnp yes)" in t,
+            "bom": not excluded and not r.startswith("#"),
+            "dnp": dnp,
             "text": t,
         })
     return out
@@ -2289,7 +2323,9 @@ def make_board(pcb, a, report):
     """Every sheet asked for of one board. Paths go to stdout as they are written, unless
     --json collects them in `report`. True when all were made."""
     set_theme(a.theme)
+    global VARIANT
     KICAD_OPTS[:] = ["--variant", a.variant] if a.variant else []
+    VARIANT = a.variant
     report.update(board=str(pcb), ok=False, sheets={}, error=None)
     try:
         out_dir = (a.out_dir or default_out_dir(pcb)).resolve()
@@ -2299,6 +2335,12 @@ def make_board(pcb, a, report):
         sheets = choose_sheets(a, gerbv=bool(shutil.which("gerbv")), has_stackup=bool(stackup(board)[0]))
         if a.net:
             find_net(board, a.net)  # fail now, before minutes of rendering
+        if a.variant:
+            # kicad-cli draws the default variant, without a word, for a name it does not know.
+            known = board_variants(board["items"])
+            if a.variant.casefold() not in (v.casefold() for v in known):
+                raise Failure(f"no variant {a.variant} on this board"
+                              + (f"; variants: {', '.join(known)}" if known else "; it has none"))
         spin_opts = {"frames": a.frames, "seconds": a.seconds, "tilt": a.tilt, "swing": a.swing}
         with tempfile.TemporaryDirectory(prefix="kishot-") as t:
             old = None
@@ -2384,6 +2426,9 @@ def main(argv=None):
             print(f"kishot: error: {usage}", file=sys.stderr)
             return 2
         say(str(e))
+        if a.json:
+            print(json.dumps({"kishot": __version__, "ok": False, "error": str(e), "boards": []},
+                             ensure_ascii=False), flush=True)
         return 1
 
     def make(which, first):
@@ -2397,8 +2442,8 @@ def main(argv=None):
             if b.open and written and (first or b.workspace):
                 open_images([p for p in written if p.suffix != ".pdf"] or written, b.viewer, b.workspace)
         if a.json:
-            print(json.dumps({"kishot": __version__, "ok": ok, "boards": reports}, ensure_ascii=False),
-                  flush=True)
+            print(json.dumps({"kishot": __version__, "ok": ok, "error": None, "boards": reports},
+                             ensure_ascii=False), flush=True)
         return ok
 
     try:

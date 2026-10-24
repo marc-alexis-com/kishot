@@ -1,13 +1,13 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/images/banner-dark.gif">
-    <img src="docs/images/banner-light.gif" alt="kishot: presentation sheets of a KiCad board. A low-poly circuit board turns in a 3D viewport, in KiCad's colours" width="100%">
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/marc-alexis-com/kishot/main/docs/images/banner-dark.gif">
+    <img src="https://raw.githubusercontent.com/marc-alexis-com/kishot/main/docs/images/banner-light.gif" alt="kishot: presentation sheets of a KiCad board. A low-poly circuit board turns in a 3D viewport, in KiCad's colours" width="100%">
   </picture>
 </p>
 
 <p align="center">
   <a href="https://github.com/marc-alexis-com/kishot/actions/workflows/ci.yml"><img src="https://github.com/marc-alexis-com/kishot/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-1f2937?style=flat-square" alt="MIT license"></a>
+  <a href="https://github.com/marc-alexis-com/kishot/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-1f2937?style=flat-square" alt="MIT license"></a>
   <img src="https://img.shields.io/badge/KiCad-9%20%2F%2010-1f2937?style=flat-square" alt="KiCad 9 / 10">
   <img src="https://img.shields.io/badge/python-3.9%2B%2C%20no%20dependencies-1f2937?style=flat-square" alt="Python 3.9+, no dependencies">
 </p>
@@ -54,40 +54,40 @@ kishot my-board.kicad_pcb
 ## A look at it
 
 <p align="center">
-  <img src="docs/images/tour.gif" alt="A slideshow of kishot: for each feature, the command in a dark bar and what it makes: the 3D sheet, the copper layers, DRC rings, one net, the copper and schematic diffs, 3D before and after, the fade, the three spin GIFs, and the paths printed on stdout" width="100%">
+  <img src="https://raw.githubusercontent.com/marc-alexis-com/kishot/main/docs/images/tour.gif" alt="A slideshow of kishot: for each feature, the command in a dark bar and what it makes: the 3D sheet, the copper layers, DRC rings, one net, the copper and schematic diffs, 3D before and after, the fade, the three spin GIFs, and the paths printed on stdout" width="100%">
   <br><sub>A tour: each command, and what it makes, on one demo board. Made by
-  <a href="docs/images/showcase.py">docs/images/showcase.py</a>, from KiCad's own demo project.</sub>
+  <a href="https://github.com/marc-alexis-com/kishot/blob/main/docs/images/showcase.py">docs/images/showcase.py</a>, from KiCad's own demo project.</sub>
 </p>
 
 <p align="center">
-  <img src="docs/images/features.png" alt="Every sheet of kishot at a glance, twelve thumbnails each captioned with its command" width="100%">
+  <img src="https://raw.githubusercontent.com/marc-alexis-com/kishot/main/docs/images/features.png" alt="Every sheet of kishot at a glance, twelve thumbnails each captioned with its command" width="100%">
 </p>
 
 <details>
 <summary><b>Every sheet in full size</b></summary>
 
 <p align="center">
-  <img src="docs/images/spin.gif" alt="kishot's spin GIF: the RoyalBlue54L Feather, rendered by KiCad, turning once on itself, its name underneath" width="49%">
-  <img src="docs/images/spin-ps2.gif" alt="The same turn pixelated like a PS2 game, on the background of KiCad's 3D viewer" width="49%">
+  <img src="https://raw.githubusercontent.com/marc-alexis-com/kishot/main/docs/images/spin.gif" alt="kishot's spin GIF: the RoyalBlue54L Feather, rendered by KiCad, turning once on itself, its name underneath" width="49%">
+  <img src="https://raw.githubusercontent.com/marc-alexis-com/kishot/main/docs/images/spin-ps2.gif" alt="The same turn pixelated like a PS2 game, on the background of KiCad's 3D viewer" width="49%">
   <br><sub><code>kishot -s spin</code>: the board turning, as GIFs that Slack, Discord or a README play
   inline. The plain one and the PS2 one (shown here from <code>--fast</code>); a third, transparent and
   without text, goes on any background.</sub>
 </p>
 
 <p align="center">
-  <img src="docs/images/3d.png" alt="kishot's 3D sheet of the RoyalBlue54L Feather: top, bottom, three three-quarter views and the profile, under a header with title, revision, date, maker, size, copper layers and footprints" width="100%">
+  <img src="https://raw.githubusercontent.com/marc-alexis-com/kishot/main/docs/images/3d.png" alt="kishot's 3D sheet of the RoyalBlue54L Feather: top, bottom, three three-quarter views and the profile, under a header with title, revision, date, maker, size, copper layers and footprints" width="100%">
   <br><sub>The 3D sheet: six views of the board, in the PCB editor's colours, under its title block.</sub>
 </p>
 
 <p align="center">
-  <img src="docs/images/layers.png" alt="kishot's copper-layer sheet of the RoyalBlue54L Feather: eight layers in a grid, each captioned with its track count and plane net" width="100%">
+  <img src="https://raw.githubusercontent.com/marc-alexis-com/kishot/main/docs/images/layers.png" alt="kishot's copper-layer sheet of the RoyalBlue54L Feather: eight layers in a grid, each captioned with its track count and plane net" width="100%">
   <br><sub>The copper-layer sheet of the same board, eight layers. With the pours shown, most of
   these would be a solid rectangle of copper: here, the planes are named in the caption and the
   tracks are left to see. The bottom layer is mirrored, as seen from below.</sub>
 </p>
 
 <p align="center">
-  <img src="docs/images/diff.png" alt="kishot's diff sheet: the eight copper layers in grey, removed tracks in red and added ones in green, each ringed with a pale halo, and the count per layer" width="100%">
+  <img src="https://raw.githubusercontent.com/marc-alexis-com/kishot/main/docs/images/diff.png" alt="kishot's diff sheet: the eight copper layers in grey, removed tracks in red and added ones in green, each ringed with a pale halo, and the count per layer" width="100%">
   <br><sub><code>kishot --diff HEAD~1</code>: what changed in the copper since the previous commit. Two
   vias moved (on every layer they go through), tracks removed on F.Cu and In5.Cu, a new path on B.Cu.</sub>
 </p>
@@ -95,20 +95,20 @@ kishot my-board.kicad_pcb
 ### For a review
 
 <p align="center">
-  <img src="docs/images/sch-diff.png" alt="kishot's schematic diff: five pages in grey, one marked changed, and a close-up where the value of C13 goes from 300pF in red to 47k in green" width="100%">
+  <img src="https://raw.githubusercontent.com/marc-alexis-com/kishot/main/docs/images/sch-diff.png" alt="kishot's schematic diff: five pages in grey, one marked changed, and a close-up where the value of C13 goes from 300pF in red to 47k in green" width="100%">
   <br><sub><code>kishot --diff HEAD~1</code>, the schematic: every page compared, and a close-up of what
   changed on each page that did (here, the value of C13).</sub>
 </p>
 
 <p align="center">
-  <img src="docs/images/3d-diff.png" alt="kishot's 3D before and after: top and bottom views of both versions side by side, the moved switch ringed in red on the current one" width="49%">
-  <img src="docs/images/fade.gif" alt="A GIF going from the older board to the current one: the switch slides to its new place" width="49%">
+  <img src="https://raw.githubusercontent.com/marc-alexis-com/kishot/main/docs/images/3d-diff.png" alt="kishot's 3D before and after: top and bottom views of both versions side by side, the moved switch ringed in red on the current one" width="49%">
+  <img src="https://raw.githubusercontent.com/marc-alexis-com/kishot/main/docs/images/fade.gif" alt="A GIF going from the older board to the current one: the switch slides to its new place" width="49%">
   <br><sub>The 3D views before and after, what changed ringed in red, and the <code>fade</code> GIF
   between the two versions: a part that moved blinks.</sub>
 </p>
 
 <p align="center">
-  <img src="docs/images/net-VBUS.png" alt="kishot's net sheet: the VBUS net in red on F.Cu, the rest of the copper in light grey on every layer" width="100%">
+  <img src="https://raw.githubusercontent.com/marc-alexis-com/kishot/main/docs/images/net-VBUS.png" alt="kishot's net sheet: the VBUS net in red on F.Cu, the rest of the copper in light grey on every layer" width="100%">
   <br><sub><code>kishot --net VBUS</code>: where one net runs, layer by layer, and how long it is.</sub>
 </p>
 
@@ -117,12 +117,12 @@ kishot my-board.kicad_pcb
 ### For fabrication
 
 <p align="center">
-  <img src="docs/images/bom.png" alt="kishot's visual BOM: every fitted part of the RoyalBlue54L Feather numbered on the top and bottom views, and the list grouped by value and footprint underneath" width="100%">
+  <img src="https://raw.githubusercontent.com/marc-alexis-com/kishot/main/docs/images/bom.png" alt="kishot's visual BOM: every fitted part of the RoyalBlue54L Feather numbered on the top and bottom views, and the list grouped by value and footprint underneath" width="100%">
   <br><sub><code>kishot -s bom</code>: each line of the BOM has a number and a colour, found on the board.</sub>
 </p>
 
 <p align="center">
-  <img src="docs/images/gerbers.png" alt="kishot's Gerber sheet: the top and bottom of the board as drawn from the Gerber files, blue solder mask, gold exposed copper, white silkscreen, holes" width="100%">
+  <img src="https://raw.githubusercontent.com/marc-alexis-com/kishot/main/docs/images/gerbers.png" alt="kishot's Gerber sheet: the top and bottom of the board as drawn from the Gerber files, blue solder mask, gold exposed copper, white silkscreen, holes" width="100%">
   <br><sub><code>kishot -s gerbers</code>: what the fab receives, drawn by gerbv from the files KiCad writes,
   in the mask colour and finish of the stackup.</sub>
 </p>
@@ -131,28 +131,28 @@ kishot my-board.kicad_pcb
 <summary><b>X-ray, assembly, silkscreen, dimensions, stackup, dark theme</b></summary>
 
 <p align="center">
-  <img src="docs/images/xray.png" alt="kishot's x-ray sheet: the eight copper layers on top of one another in their KiCad colours, half transparent, from above and below, with a legend" width="100%">
+  <img src="https://raw.githubusercontent.com/marc-alexis-com/kishot/main/docs/images/xray.png" alt="kishot's x-ray sheet: the eight copper layers on top of one another in their KiCad colours, half transparent, from above and below, with a legend" width="100%">
   <br><sub><code>kishot -s xray</code>: every layer at once, to follow a signal from one to the next.</sub>
 </p>
 
 <p align="center">
-  <img src="docs/images/assembly.png" alt="kishot's assembly sheet: the fabrication layers of both sides with their references, pads in grey" width="100%">
+  <img src="https://raw.githubusercontent.com/marc-alexis-com/kishot/main/docs/images/assembly.png" alt="kishot's assembly sheet: the fabrication layers of both sides with their references, pads in grey" width="100%">
   <br><sub><code>kishot -s assembly</code>: the references on the fabrication layers, values hidden.</sub>
 </p>
 
 <p align="center">
-  <img src="docs/images/silk.png" alt="kishot's silkscreen sheet: the silkscreen of both sides in ink, the pads in grey" width="100%">
+  <img src="https://raw.githubusercontent.com/marc-alexis-com/kishot/main/docs/images/silk.png" alt="kishot's silkscreen sheet: the silkscreen of both sides in ink, the pads in grey" width="100%">
   <br><sub><code>kishot -s silk</code>: the silkscreen as printed, cut where the mask opens.</sub>
 </p>
 
 <p align="center">
-  <img src="docs/images/dims.png" alt="kishot's dimension sheet: the top view with the width and height of the outline, and the four mounting holes with their diameter and position" width="70%">
-  <img src="docs/images/stackup.png" alt="kishot's stackup sheet: the layers of the board from top to bottom, with type, thickness, material and dielectric constant" width="28%">
+  <img src="https://raw.githubusercontent.com/marc-alexis-com/kishot/main/docs/images/dims.png" alt="kishot's dimension sheet: the top view with the width and height of the outline, and the four mounting holes with their diameter and position" width="70%">
+  <img src="https://raw.githubusercontent.com/marc-alexis-com/kishot/main/docs/images/stackup.png" alt="kishot's stackup sheet: the layers of the board from top to bottom, with type, thickness, material and dielectric constant" width="28%">
   <br><sub><code>kishot -s dims</code> and <code>-s stackup</code>.</sub>
 </p>
 
 <p align="center">
-  <img src="docs/images/layers-dark.png" alt="kishot's copper-layer sheet on a dark background" width="100%">
+  <img src="https://raw.githubusercontent.com/marc-alexis-com/kishot/main/docs/images/layers-dark.png" alt="kishot's copper-layer sheet on a dark background" width="100%">
   <br><sub><code>kishot --theme dark</code>.</sub>
 </p>
 
@@ -320,10 +320,11 @@ the new images replace the old windows; with another viewer, they are opened the
 - **stdout** is the list of images written, one absolute path per line, printed as each sheet
   is done. Nothing else is ever printed there.
 - **`--json`** prints one JSON object instead, once everything is done (one per run with
-  `--watch`): `{"kishot": version, "ok": bool, "boards": [...]}`, each board with its path,
+  `--watch`): `{"kishot": version, "ok": bool, "error": null, "boards": [...]}`, each board with its path,
   `ok`, `error`, the paths written per sheet, and its figures: title block, size, thickness,
   each copper layer's tracks, length and planes, vias, narrowest track, net classes,
-  footprints, parts fitted, DRC counts.
+  footprints, parts fitted, DRC counts. When kishot fails before any board (none found, a tool
+  missing), `error` says why and `boards` is empty.
 - **stderr** carries progress (`kishot: 3d sheet of board.kicad_pcb…`) and errors, one line
   each, without a traceback.
 - **Exit status**: `0` when every sheet asked for was written, `1` on any failure (no board,
@@ -372,7 +373,7 @@ When a part sticks out of the frame (a cable, a long connector, a tall capacitor
 rendered again further out, up to twice, and a warning says so if it is still cut.
 
 <p align="center">
-  <img src="docs/images/layers.gif" alt="A low-poly board comes apart: its parts rise, the board fades, and four copper layers float apart in KiCad's layer colours, red, green, orange and blue, then close up again" width="100%">
+  <img src="https://raw.githubusercontent.com/marc-alexis-com/kishot/main/docs/images/layers.gif" alt="A low-poly board comes apart: its parts rise, the board fades, and four copper layers float apart in KiCad's layer colours, red, green, orange and blue, then close up again" width="100%">
   <br><sub>What the copper-layer sheet shows: the board without its body and pours, one layer at a time.</sub>
 </p>
 
@@ -512,7 +513,7 @@ board is public, a link to it. Please keep pull requests to the standard library
 
 ## Legal
 
-The banner and the exploded view are generated by [docs/images/render.py](docs/images/render.py), a small
+The banner and the exploded view are generated by [docs/images/render.py](https://github.com/marc-alexis-com/kishot/blob/main/docs/images/render.py), a small
 software renderer in the manner of a PS2 game: a low-poly board built from boxes after the
 proportions of a Raspberry Pi 4, its tracks drawn at random, in KiCad's default colours. It
 uses no Raspberry Pi design file; "Raspberry Pi" is a trademark of Raspberry Pi Ltd.
@@ -526,4 +527,4 @@ or with Lord's Boards; "KiCad" is used here only to name the software it works w
 
 ## License
 
-[MIT](LICENSE)
+[MIT](https://github.com/marc-alexis-com/kishot/blob/main/LICENSE)

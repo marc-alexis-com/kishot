@@ -444,5 +444,50 @@ class Batches(unittest.TestCase):
                 kishot.find_boards([d], False)
 
 
+
+VARIANTS = """(kicad_pcb
+\t(variants
+\t\t(variant (name "Lite"))
+\t\t(variant (name "full"))
+\t)
+\t(footprint "RF:Module"
+\t\t(layer "F.Cu")
+\t\t(at 10 10)
+\t\t(property "Reference" "U1" (at 0 0 0) (layer "F.SilkS"))
+\t\t(attr smd)
+\t\t(variant (name "Lite") (dnp yes))
+\t\t(variant (name "full") (exclude_from_bom yes))
+\t)
+\t(footprint "R:R"
+\t\t(layer "F.Cu")
+\t\t(at 20 10)
+\t\t(property "Reference" "R1" (at 0 0 0) (layer "F.SilkS"))
+\t\t(attr smd dnp)
+\t\t(variant (name "full") (dnp no))
+\t)
+)
+"""
+
+
+class Variants(unittest.TestCase):
+    def setUp(self):
+        self.items = kishot.top_level_items(VARIANTS)
+
+    def tearDown(self):
+        kishot.VARIANT = None
+
+    def flags(self, variant):
+        kishot.VARIANT = variant
+        return {f["ref"]: (f["dnp"], f["bom"]) for f in kishot.footprints(self.items)}
+
+    def test_names(self):
+        self.assertEqual(kishot.board_variants(self.items), ["Lite", "full"])
+
+    def test_each_variant_overrides_the_base(self):
+        self.assertEqual(self.flags(None), {"U1": (False, True), "R1": (True, True)})
+        self.assertEqual(self.flags("lite"), {"U1": (True, True), "R1": (True, True)})
+        self.assertEqual(self.flags("FULL"), {"U1": (False, False), "R1": (False, True)})
+
+
 if __name__ == "__main__":
     unittest.main()

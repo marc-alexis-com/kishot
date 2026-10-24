@@ -2,7 +2,8 @@
 
     nix develop -c python3 docs/images/showcase.py docs/images [--demo DIR] [--quality] [--keep DIR]
 
-Needs kicad-cli, ImageMagick, git, numpy and Pillow (the flake's dev shell has them all).
+Needs kicad-cli, ImageMagick, git, gerbv, ffmpeg, numpy and Pillow (the flake's dev shell has
+them all).
 It copies KiCad's RoyalBlue54L Feather demo project to a scratch git repository, commits it,
 then edits a copy the way a review round would (tracks removed on F.Cu, a switch moved, a
 capacitor's value changed in the schematic) and commits that too. kishot then makes every
@@ -104,6 +105,9 @@ def run_kishot(demo, work, quality):
         cmd.append("--fast")
     print("running", " ".join(cmd[2:]), file=sys.stderr)
     subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL)
+    dark = [sys.executable, str(ROOT / "kishot.py"), str(repo), "-s", "layers", "--theme", "dark",
+            "-o", str(out / "dark"), *([] if quality else ["--fast"])]
+    subprocess.run(dark, check=True, stdout=subprocess.DEVNULL)
     return out
 
 
@@ -281,6 +285,10 @@ def slides(stem):
              caption="every copper layer, pours hidden: tracks, lengths, plane nets"),
         dict(command="kishot --drc", file=f"{stem}-layers.png", focus=["#d000d0"], frac=0.2,
              caption="KiCad's DRC: counts in the header, each violation ringed where it is"),
+        dict(command="kishot -s xray", file=f"{stem}-xray.png",
+             caption="every copper layer at once, each in its colour, from above and below"),
+        dict(command="kishot --theme dark", file=f"dark/{stem}-layers.png",
+             caption="every sheet on a dark background"),
         dict(command="kishot --net VBUS", file=f"{stem}-net-VBUS.png", focus=["#c83434"], frac=0.2,
              caption="one net in colour on every layer, the rest of the copper in grey"),
         dict(command="kishot --diff HEAD~1", file=f"{stem}-diff.png", focus=removed_added, frac=0.16,
@@ -291,12 +299,26 @@ def slides(stem):
              caption="3D before and after, what moved ringed in red"),
         dict(command="kishot --diff HEAD~1", file=f"{stem}-fade.gif", focus="motion", frac=0.35,
              caption="and a GIF that fades from one version to the other: the switch moved"),
+        dict(command="kishot -s bom", file=f"{stem}-bom.png",
+             caption="each part numbered on the board, the list grouped by value"),
+        dict(command="kishot -s assembly", file=f"{stem}-assembly.png",
+             caption="the references on the fabrication layers, to solder from paper"),
+        dict(command="kishot -s silk", file=f"{stem}-silk.png",
+             caption="the silkscreen as the fab prints it, to proofread before ordering"),
+        dict(command="kishot -s gerbers", file=f"{stem}-gerbers.png",
+             caption="the Gerbers as the fab gets them, drawn by gerbv: mask, finish, silk, holes"),
+        dict(command="kishot -s dims", file=f"{stem}-dims.png",
+             caption="the outline dimensioned, the mounting holes placed"),
+        dict(command="kishot -s stackup", file=f"{stem}-stackup.png",
+             caption="the stackup: layers, thicknesses, materials, finish"),
         dict(command="kishot -s spin", file=f"{stem}-spin.gif",
              caption="the board turning, rendered by KiCad, as a GIF for chat"),
         dict(command="kishot -s spin", file=f"{stem}-spin-clear.gif", backdrop="checker",
              caption="the same turn, transparent, for any background"),
         dict(command="kishot -s spin", file=f"{stem}-spin-ps2.gif",
-             caption="and pixelated like a PS2 game"),
+             caption="pixelated like a PS2 game"),
+        dict(command="kishot -s spin --swing 30", file=f"{stem}-spin-clear.webp", backdrop="checker",
+             caption="and a WebP with soft edges and its shadow; an MP4 too, with ffmpeg"),
     ]
 
 
@@ -344,10 +366,10 @@ def written_paths(out):
 
     def key(name):
         sheet = name[len(BOARD) + 1:].rsplit(".", 1)[0]
-        base = "net" if sheet.startswith("net-") else "spin" if sheet.startswith("spin") else sheet
-        return order.get(base, 99), sheet != "spin", name  # spin.gif before its variants
+        base = next((b for b in ("net", "spin", "print") if sheet.startswith(b)), sheet)
+        return order.get(base, 99), sheet != base, name  # spin.gif before its variants
 
-    return [f"fab/{n}" for n in sorted((p.name for p in out.iterdir()), key=key)]
+    return [f"fab/{n}" for n in sorted((p.name for p in out.iterdir() if p.is_file()), key=key)]
 
 
 def tour(out, dest):
